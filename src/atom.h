@@ -85,7 +85,7 @@ class Atom : protected Pointers {
 
   // USER-SPH package
 
-  double *rho,*drho,*e,*de,*cv;
+  double *rho,*drho,*e,*de,*cv,*nu;
   double **vest;
 
   // USER-SMD package
@@ -153,7 +153,7 @@ class Atom : protected Pointers {
   int rmass_flag,radius_flag,omega_flag,torque_flag,angmom_flag;
   int vfrac_flag,spin_flag,eradius_flag,ervel_flag,erforce_flag;
   int cs_flag,csforce_flag,vforce_flag,ervelforce_flag,etag_flag;
-  int rho_flag,e_flag,cv_flag,vest_flag;
+  int rho_flag,e_flag,cv_flag,nu_flag,vest_flag;
   int dpd_flag,edpd_flag,tdpd_flag;
 
   //USER-SPIN package
