@@ -39,7 +39,7 @@ class FixMesoBoussinesq : public Fix {
   void *extract(const char *, int &);
 
  protected:
-  int style,disable; // need??
+  int disable;
   double magnitude;
   double alpha;
   double xdir,ydir,zdir;

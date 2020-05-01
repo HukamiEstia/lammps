@@ -52,7 +52,7 @@ FixMesoBoussinesq::FixMesoBoussinesq(LAMMPS *lmp, int narg, char **arg) :
   mstr = astr = xstr = ystr = zstr = NULL;
   mstyle = astyle = xstyle = ystyle = zstyle = CONSTANT; // needed if variable magn and dir
 
-  // replace to only constant gravity
+  // if variable magnitude
   if (strstr(arg[3],"v_") == arg[3]) {
     int n = strlen(&arg[3][2]) + 1;
     mstr = new char[n];
@@ -63,46 +63,42 @@ FixMesoBoussinesq::FixMesoBoussinesq(LAMMPS *lmp, int narg, char **arg) :
     mstyle = CONSTANT;
   }
 
-  int iarg=4;
+  // set alpha thermal expansion coefficient
+  alpha = force->numeric(FLERR,arg[4]);
 
-  // remove style arg (and variable direction?)
-  // add thermal expansion coefficient
-  } else if (strcmp(arg[4],"vector") == 0) {
-    if (narg < 8) error->all(FLERR,"Illegal fix boussinesq command");
-    style = VECTOR;
-    if (strstr(arg[5],"v_") == arg[5]) {
-      int n = strlen(&arg[5][2]) + 1;
-      xstr = new char[n];
-      strcpy(xstr,&arg[5][2]);
-      xstyle = EQUAL;
-    } else {
-      xdir = force->numeric(FLERR,arg[5]);
-      xstyle = CONSTANT;
-    }
-    if (strstr(arg[6],"v_") == arg[6]) {
-      int n = strlen(&arg[6][2]) + 1;
-      ystr = new char[n];
-      strcpy(ystr,&arg[6][2]);
-      ystyle = EQUAL;
-    } else {
-      ydir = force->numeric(FLERR,arg[6]);
-      ystyle = CONSTANT;
-    }
-    if (strstr(arg[7],"v_") == arg[7]) {
-      int n = strlen(&arg[7][2]) + 1;
-      zstr = new char[n];
-      strcpy(zstr,&arg[7][2]);
-      zstyle = EQUAL;
-    } else {
-      zdir = force->numeric(FLERR,arg[7]);
-      zstyle = CONSTANT;
-    }
-    iarg = 8;
-
-  } else error->all(FLERR,"Illegal fix boussinesq command");
+  int iarg=5;
+  
+  if (narg < 8) error->all(FLERR,"Illegal fix boussinesq command");
+  if (strstr(arg[5],"v_") == arg[5]) {
+    int n = strlen(&arg[5][2]) + 1;
+    xstr = new char[n];
+    strcpy(xstr,&arg[5][2]);
+    xstyle = EQUAL;
+  } else {
+    xdir = force->numeric(FLERR,arg[5]);
+    xstyle = CONSTANT;
+  }
+  if (strstr(arg[6],"v_") == arg[6]) {
+    int n = strlen(&arg[6][2]) + 1;
+    ystr = new char[n];
+    strcpy(ystr,&arg[6][2]);
+    ystyle = EQUAL;
+  } else {
+    ydir = force->numeric(FLERR,arg[6]);
+    ystyle = CONSTANT;
+  }
+  if (strstr(arg[7],"v_") == arg[7]) {
+    int n = strlen(&arg[7][2]) + 1;
+    zstr = new char[n];
+    strcpy(zstr,&arg[7][2]);
+    zstyle = EQUAL;
+  } else {
+    zdir = force->numeric(FLERR,arg[7]);
+    zstyle = CONSTANT;
+  }
+  iarg = 8;
 
   // optional keywords
-
   disable = 0;
 
   while (iarg < narg) {
@@ -128,7 +124,7 @@ FixMesoBoussinesq::~FixMesoBoussinesq()
   if (copymode) return;
 
   delete [] mstr;
-  // + thermal expansion coeff
+  delete [] astr;
   delete [] xstr;
   delete [] ystr;
   delete [] zstr;
@@ -162,6 +158,13 @@ void FixMesoBoussinesq::init()
     if (mvar < 0)
       error->all(FLERR,"Variable name for fix boussinesq does not exist");
     if (!input->variable->equalstyle(mvar))
+      error->all(FLERR,"Variable for fix boussinesq is invalid style");
+  }
+  if (astr) {
+    avar = input->variable->find(astr);
+    if (avar < 0)
+      error->all(FLERR,"Variable name for fix boussinesq does not exist");
+    if (!input->variable->equalstyle(avar))
       error->all(FLERR,"Variable for fix boussinesq is invalid style");
   }
   if (xstr) {
@@ -218,7 +221,6 @@ void FixMesoBoussinesq::post_force(int /*vflag*/)
   if (varflag != CONSTANT) {
     modify->clearstep_compute();
     if (mstyle == EQUAL) magnitude = input->variable->compute_equal(mvar);
-    // + thermal expansion coeff
     if (xstyle == EQUAL) xdir = input->variable->compute_equal(xvar);
     if (ystyle == EQUAL) ydir = input->variable->compute_equal(yvar);
     if (zstyle == EQUAL) zdir = input->variable->compute_equal(zvar);
@@ -253,21 +255,21 @@ void FixMesoBoussinesq::post_force(int /*vflag*/)
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         massone = rmass[i];
-        // tempone = (e[i]/cv[i]);
-        // f[i][0] += massone*xacc*(1 - alpha*tempone);
-        // f[i][1] += massone*yacc*(1 - alpha*tempone);
-        // f[i][2] += massone*zacc*(1 - alpha*tempone);
-        // egrav -= massone * (1 - alpha*tempone) * (xacc*x[i][0] + yacc*x[i][1] + zacc*x[i][2]);
+        tempone = (e[i]/cv[i]);
+        f[i][0] += massone*xacc*(1 - alpha*tempone);
+        f[i][1] += massone*yacc*(1 - alpha*tempone);
+        f[i][2] += massone*zacc*(1 - alpha*tempone);
+        egrav -= massone * (1 - alpha*tempone) * (xacc*x[i][0] + yacc*x[i][1] + zacc*x[i][2]);
       }
   } else {
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         massone = mass[type[i]];
-        // tempone = (e[i]/cv[i]);
-        // f[i][0] += massone*xacc*(1 - alpha*tempone);
-        // f[i][1] += massone*yacc*(1 - alpha*tempone);
-        // f[i][2] += massone*zacc*(1 - alpha*tempone);
-        // egrav -= massone * (1 - alpha*tempone) * (xacc*x[i][0] + yacc*x[i][1] + zacc*x[i][2]);
+        tempone = (e[i]/cv[i]);
+        f[i][0] += massone*xacc*(1 - alpha*tempone);
+        f[i][1] += massone*yacc*(1 - alpha*tempone);
+        f[i][2] += massone*zacc*(1 - alpha*tempone);
+        egrav -= massone * (1 - alpha*tempone) * (xacc*x[i][0] + yacc*x[i][1] + zacc*x[i][2]);
       }
   }
 }
@@ -283,20 +285,18 @@ void FixMesoBoussinesq::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 
 void FixMesoBoussinesq::set_acceleration()
 {
-  if (style == VECTOR) { // remove style arg
-    if (domain->dimension == 3) {
-      double length = sqrt(xdir*xdir + ydir*ydir + zdir*zdir);
-      xgrav = xdir/length;
-      ygrav = ydir/length;
-      zgrav = zdir/length;
-    } else {
-      double length = sqrt(xdir*xdir + ydir*ydir);
-      xgrav = xdir/length;
-      ygrav = ydir/length;
-      zgrav = 0.0;
-    }
+  if (domain->dimension == 3) {
+    double length = sqrt(xdir*xdir + ydir*ydir + zdir*zdir);
+    xgrav = xdir/length;
+    ygrav = ydir/length;
+    zgrav = zdir/length;
+  } else {
+    double length = sqrt(xdir*xdir + ydir*ydir);
+    xgrav = xdir/length;
+    ygrav = ydir/length;
+    zgrav = 0.0;
   }
-
+  
   gvec[0] = xacc = magnitude*xgrav;
   gvec[1] = yacc = magnitude*ygrav;
   gvec[2] = zacc = magnitude*zgrav;
