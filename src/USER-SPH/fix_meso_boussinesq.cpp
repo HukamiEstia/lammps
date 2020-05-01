@@ -190,9 +190,8 @@ void FixMesoBoussinesq::init()
   }
 
   varflag = CONSTANT;
-  if (mstyle != CONSTANT || vstyle != CONSTANT || pstyle != CONSTANT ||
-      tstyle != CONSTANT || xstyle != CONSTANT || ystyle != CONSTANT ||
-      zstyle != CONSTANT) varflag = EQUAL;
+  if (mstyle != CONSTANT || xstyle != CONSTANT||
+      ystyle != CONSTANT || zstyle != CONSTANT) varflag = EQUAL;
 
   // set gravity components once and for all
 
