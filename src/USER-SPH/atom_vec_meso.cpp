@@ -32,13 +32,14 @@ AtomVecMeso::AtomVecMeso(LAMMPS *lmp) : AtomVec(lmp)
   mass_type = 1;
   forceclearflag = 1;
 
+  // We extend the meso style with per-atom viscosities (nu)
   comm_x_only = 0; // we communicate not only x forward but also vest ...
   comm_f_only = 0; // we also communicate de and drho in reverse direction
-  size_forward = 8; // 3 + rho + e + vest[3], that means we may only communicate 5 in hybrid
-  size_reverse = 5; // 3 + drho + de
-  size_border = 12; // 6 + rho + e + vest[3] + cv
+  size_forward = 9; // 3 + rho + e + vest[3] + nu
+  size_reverse = 6; // 3 + drho + de + nu
+  size_border = 13; // 6 + rho + e + vest[3] + cv + nu
   size_velocity = 3;
-  size_data_atom = 8;
+  size_data_atom = 9;
   size_data_vel = 4;
   xcol_data = 6;
 
@@ -46,6 +47,7 @@ AtomVecMeso::AtomVecMeso(LAMMPS *lmp) : AtomVec(lmp)
   atom->rho_flag = 1;
   atom->cv_flag = 1;
   atom->vest_flag = 1;
+  atom->nu_flag = 1;
 }
 
 /* ----------------------------------------------------------------------
@@ -76,6 +78,8 @@ void AtomVecMeso::grow(int n)
   de = memory->grow(atom->de, nmax*comm->nthreads, "atom:de");
   vest = memory->grow(atom->vest, nmax, 3, "atom:vest");
   cv = memory->grow(atom->cv, nmax, "atom:cv");
+  // grow per-atom viscosity
+  nu = memory->grow(atom->nu, nmax, "atom:nu");
 
   if (atom->nextra_grow)
     for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
@@ -100,6 +104,7 @@ void AtomVecMeso::grow_reset() {
   de = atom->de;
   vest = atom->vest;
   cv = atom->cv;
+  nu = atom->nu; // viscosity added
 }
 
 /* ---------------------------------------------------------------------- */
@@ -122,6 +127,7 @@ void AtomVecMeso::copy(int i, int j, int delflag) {
   e[j] = e[i];
   de[j] = de[i];
   cv[j] = cv[i];
+  nu[j] = nu[i]; // viscosity added
   vest[j][0] = vest[i][0];
   vest[j][1] = vest[i][1];
   vest[j][2] = vest[i][2];
@@ -150,6 +156,7 @@ int AtomVecMeso::pack_comm_hybrid(int n, int *list, double *buf) {
     j = list[i];
     buf[m++] = rho[j];
     buf[m++] = e[j];
+    buf[m++] = nu[j]; // pack viscosity into hybrid comm buffer 
     buf[m++] = vest[j][0];
     buf[m++] = vest[j][1];
     buf[m++] = vest[j][2];
@@ -168,6 +175,7 @@ int AtomVecMeso::unpack_comm_hybrid(int n, int first, double *buf) {
   for (i = first; i < last; i++) {
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from hybrid comm buffer
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -186,6 +194,7 @@ int AtomVecMeso::pack_border_hybrid(int n, int *list, double *buf) {
     j = list[i];
     buf[m++] = rho[j];
     buf[m++] = e[j];
+    buf[m++] = nu[j]; // pack viscosity into border comm buffer 
     buf[m++] = vest[j][0];
     buf[m++] = vest[j][1];
     buf[m++] = vest[j][2];
@@ -204,6 +213,7 @@ int AtomVecMeso::unpack_border_hybrid(int n, int first, double *buf) {
   for (i = first; i < last; i++) {
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from border comm buffer
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -222,6 +232,7 @@ int AtomVecMeso::pack_reverse_hybrid(int n, int first, double *buf) {
   for (i = first; i < last; i++) {
     buf[m++] = drho[i];
     buf[m++] = de[i];
+    buf[m++] = nu[i]; // pack viscosity into reverse comm buffer (needed to compute forces)
   }
   return m;
 }
@@ -237,6 +248,7 @@ int AtomVecMeso::unpack_reverse_hybrid(int n, int *list, double *buf) {
     j = list[i];
     drho[j] += buf[m++];
     de[j] += buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from reverse comm buffer (needed to compute forces)
   }
   return m;
 }
@@ -257,7 +269,8 @@ int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = x[j][1];
       buf[m++] = x[j][2];
       buf[m++] = rho[j];
-      buf[m++] = e[j];
+      buf[m++] = e[j];    
+      buf[m++] = nu[j]; // pack viscosity into comm buffer
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -278,7 +291,8 @@ int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = x[j][1] + dy;
       buf[m++] = x[j][2] + dz;
       buf[m++] = rho[j];
-      buf[m++] = e[j];
+      buf[m++] = e[j];    
+      buf[m++] = nu[j]; // pack viscosity into comm buffer
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -306,7 +320,8 @@ int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = v[j][1];
       buf[m++] = v[j][2];
       buf[m++] = rho[j];
-      buf[m++] = e[j];
+      buf[m++] = e[j];    
+      buf[m++] = nu[j]; // pack viscosity into comm buffer
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -330,7 +345,8 @@ int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = v[j][1];
       buf[m++] = v[j][2];
       buf[m++] = rho[j];
-      buf[m++] = e[j];
+      buf[m++] = e[j];    
+      buf[m++] = nu[j]; // pack viscosity into comm buffer
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -353,6 +369,7 @@ void AtomVecMeso::unpack_comm(int n, int first, double *buf) {
     x[i][2] = buf[m++];
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from comm buffer
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -376,6 +393,7 @@ void AtomVecMeso::unpack_comm_vel(int n, int first, double *buf) {
     v[i][2] = buf[m++];
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from comm buffer
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -396,6 +414,7 @@ int AtomVecMeso::pack_reverse(int n, int first, double *buf) {
     buf[m++] = f[i][2];
     buf[m++] = drho[i];
     buf[m++] = de[i];
+    buf[m++] = nu[i]; // pack viscosity into reverse comm buffer (needed to compute forces)
   }
   return m;
 }
@@ -414,6 +433,7 @@ void AtomVecMeso::unpack_reverse(int n, int *list, double *buf) {
     f[j][2] += buf[m++];
     drho[j] += buf[m++];
     de[j] += buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from reverse comm buffer (needed to compute forces)
   }
 }
 
@@ -438,6 +458,7 @@ int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = rho[j];
       buf[m++] = e[j];
       buf[m++] = cv[j];
+      buf[m++] = nu[j]; // pack viscosity into border comm buffer 
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -463,6 +484,7 @@ int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = rho[j];
       buf[m++] = e[j];
       buf[m++] = cv[j];
+      buf[m++] = nu[j]; // pack viscosity into border comm buffer 
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -497,12 +519,13 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = v[j][0];
       buf[m++] = v[j][1];
       buf[m++] = v[j][2];
-      buf[m++] = rho[j];
-      buf[m++] = e[j];
-      buf[m++] = cv[j];
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
+      buf[m++] = rho[j];
+      buf[m++] = e[j];
+      buf[m++] = cv[j];
+      buf[m++] = nu[j]; // pack viscosity into border comm buffer 
     }
   } else {
     if (domain->triclinic == 0) {
@@ -526,12 +549,13 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
         buf[m++] = v[j][0];
         buf[m++] = v[j][1];
         buf[m++] = v[j][2];
-        buf[m++] = rho[j];
-        buf[m++] = e[j];
-        buf[m++] = cv[j];
         buf[m++] = vest[j][0];
         buf[m++] = vest[j][1];
         buf[m++] = vest[j][2];
+        buf[m++] = rho[j];
+        buf[m++] = e[j];
+        buf[m++] = cv[j];
+        buf[m++] = nu[j]; // pack viscosity into border comm buffer 
       }
     } else {
       dvx = pbc[0] * h_rate[0] + pbc[5] * h_rate[5] + pbc[4] * h_rate[4];
@@ -563,6 +587,7 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
         buf[m++] = rho[j];
         buf[m++] = e[j];
         buf[m++] = cv[j];
+        buf[m++] = nu[j]; // pack viscosity into border comm buffer 
       }
     }
   }
@@ -594,6 +619,7 @@ void AtomVecMeso::unpack_border(int n, int first, double *buf) {
     rho[i] = buf[m++];
     e[i] = buf[m++];
     cv[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from border comm buffer
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -631,6 +657,7 @@ void AtomVecMeso::unpack_border_vel(int n, int first, double *buf) {
     rho[i] = buf[m++];
     e[i] = buf[m++];
     cv[i] = buf[m++];
+    nu[i] = buf[m++]; // unpack viscosity from border comm buffer
   }
 
   if (atom->nextra_border)
@@ -660,6 +687,7 @@ int AtomVecMeso::pack_exchange(int i, double *buf) {
   buf[m++] = rho[i];
   buf[m++] = e[i];
   buf[m++] = cv[i];
+  buf[m++] = nu[i]; // pack viscosity into exchange comm buffer 
   buf[m++] = vest[i][0];
   buf[m++] = vest[i][1];
   buf[m++] = vest[i][2];
@@ -694,6 +722,7 @@ int AtomVecMeso::unpack_exchange(double *buf) {
   rho[nlocal] = buf[m++];
   e[nlocal] = buf[m++];
   cv[nlocal] = buf[m++];
+  nu[nlocal] = buf[m++]; // unpack viscosity from exchange comm buffer
   vest[nlocal][0] = buf[m++];
   vest[nlocal][1] = buf[m++];
   vest[nlocal][2] = buf[m++];
@@ -716,7 +745,7 @@ int AtomVecMeso::size_restart() {
   int i;
 
   int nlocal = atom->nlocal;
-  int n = 17 * nlocal; // 11 + rho + e + cv + vest[3]
+  int n = 18 * nlocal; // 11 + rho + e + cv + nu + vest[3]
 
   if (atom->nextra_restart)
     for (int iextra = 0; iextra < atom->nextra_restart; iextra++)
@@ -747,6 +776,7 @@ int AtomVecMeso::pack_restart(int i, double *buf) {
   buf[m++] = rho[i];
   buf[m++] = e[i];
   buf[m++] = cv[i];
+  buf[m++] = nu[i]; // pack viscosity into restart buffer
   buf[m++] = vest[i][0];
   buf[m++] = vest[i][1];
   buf[m++] = vest[i][2];
@@ -785,6 +815,7 @@ int AtomVecMeso::unpack_restart(double *buf) {
   rho[nlocal] = buf[m++];
   e[nlocal] = buf[m++];
   cv[nlocal] = buf[m++];
+  nu[nlocal] = buf[m++]; // unpack viscosity from restart buffer
   vest[nlocal][0] = buf[m++];
   vest[nlocal][1] = buf[m++];
   vest[nlocal][2] = buf[m++];
@@ -824,6 +855,7 @@ void AtomVecMeso::create_atom(int itype, double *coord) {
   rho[nlocal] = 0.0;
   e[nlocal] = 0.0;
   cv[nlocal] = 1.0;
+  nu[nlocal] = 1.0; // set default viscosity to 1
   vest[nlocal][0] = 0.0;
   vest[nlocal][1] = 0.0;
   vest[nlocal][2] = 0.0;
@@ -868,6 +900,7 @@ void AtomVecMeso::data_atom(double *coord, imageint imagetmp, char **values) {
   vest[nlocal][1] = 0.0;
   vest[nlocal][2] = 0.0;
 
+  nu[nlocal] = 0.0;
   de[nlocal] = 0.0;
   drho[nlocal] = 0.0;
 
@@ -961,6 +994,7 @@ int AtomVecMeso::property_atom(char *name)
   if (strcmp(name,"e") == 0) return 2;
   if (strcmp(name,"de") == 0) return 3;
   if (strcmp(name,"cv") == 0) return 4;
+  if (strcmp(name,"nu") == 0) return 5;
   return -1;
 }
 
@@ -1006,7 +1040,13 @@ void AtomVecMeso::pack_property_atom(int index, double *buf,
       else buf[n] = 0.0;
       n += nvalues;
     }
-  }
+  } else if (index == 5) {
+    for (int i = 0; i < nlocal; i++) {
+      if (mask[i] & groupbit) buf[n] = nu[i];
+      else buf[n] = 0.0;
+      n += nvalues;
+    }
+  } 
 }
 
 /* ----------------------------------------------------------------------
@@ -1040,6 +1080,8 @@ bigint AtomVecMeso::memory_usage() {
     bytes += memory->usage(de, nmax*comm->nthreads);
   if (atom->memcheck("cv"))
     bytes += memory->usage(cv, nmax);
+  if (atom->memcheck("nu"))
+    bytes += memory->usage(nu, nmax);
   if (atom->memcheck("vest"))
     bytes += memory->usage(vest, nmax);
 
