@@ -67,6 +67,7 @@ OBJS = $(OBJ_DIR)/lal_atom.o $(OBJ_DIR)/lal_ans.o \
        $(OBJ_DIR)/lal_beck.o $(OBJ_DIR)/lal_beck_ext.o \
        $(OBJ_DIR)/lal_mie.o $(OBJ_DIR)/lal_mie_ext.o \
        $(OBJ_DIR)/lal_soft.o $(OBJ_DIR)/lal_soft_ext.o \
+                   $(OBJ_DIR)/lal_sph_taitwater.o $(OBJ_DIR)/lal_sph_taitwater_ext.o\
        $(OBJ_DIR)/lal_lj_coul_msm.o $(OBJ_DIR)/lal_lj_coul_msm_ext.o \
        $(OBJ_DIR)/lal_lj_gromacs.o $(OBJ_DIR)/lal_lj_gromacs_ext.o \
        $(OBJ_DIR)/lal_dpd.o $(OBJ_DIR)/lal_dpd_ext.o \
@@ -84,6 +85,9 @@ OBJS = $(OBJ_DIR)/lal_atom.o $(OBJ_DIR)/lal_ans.o \
        $(OBJ_DIR)/lal_born_coul_long_cs.o $(OBJ_DIR)/lal_born_coul_long_cs_ext.o \
        $(OBJ_DIR)/lal_born_coul_wolf_cs.o $(OBJ_DIR)/lal_born_coul_wolf_cs_ext.o \
        $(OBJ_DIR)/lal_lj_tip4p_long.o $(OBJ_DIR)/lal_lj_tip4p_long_ext.o
+	
+
+	
 
 CBNS = $(OBJ_DIR)/device.cubin $(OBJ_DIR)/device_cubin.h \
        $(OBJ_DIR)/atom.cubin $(OBJ_DIR)/atom_cubin.h \
@@ -129,7 +133,8 @@ CBNS = $(OBJ_DIR)/device.cubin $(OBJ_DIR)/device_cubin.h \
        $(OBJ_DIR)/beck.cubin $(OBJ_DIR)/beck_cubin.h \
        $(OBJ_DIR)/mie.cubin $(OBJ_DIR)/mie_cubin.h \
        $(OBJ_DIR)/soft.cubin $(OBJ_DIR)/soft_cubin.h \
-       $(OBJ_DIR)/lj_coul_msm.cubin $(OBJ_DIR)/lj_coul_msm_cubin.h \
+	$(OBJ_DIR)/sph_taitwater.cubin $(OBJ_DIR)/sph_taitwater_cubin.h \
+	$(OBJ_DIR)/lj_coul_msm.cubin $(OBJ_DIR)/lj_coul_msm_cubin.h \
        $(OBJ_DIR)/lj_gromacs.cubin $(OBJ_DIR)/lj_gromacs_cubin.h \
        $(OBJ_DIR)/dpd.cubin $(OBJ_DIR)/dpd_cubin.h \
        $(OBJ_DIR)/tersoff.cubin $(OBJ_DIR)/tersoff_cubin.h \
@@ -700,6 +705,24 @@ $(OBJ_DIR)/lal_soft.o: $(ALL_H) lal_soft.h lal_soft.cpp $(OBJ_DIR)/soft_cubin.h 
 
 $(OBJ_DIR)/lal_soft_ext.o: $(ALL_H) lal_soft.h lal_soft_ext.cpp lal_base_atomic.h
 	$(CUDR) -o $@ -c lal_soft_ext.cpp -I$(OBJ_DIR)
+
+
+
+
+$(OBJ_DIR)/sph_taitwater.cubin: lal_sph_taitwater.cu lal_precision.h lal_preprocessor.h
+	$(CUDA) --cubin -DNV_KERNEL -o $@ lal_sph_taitwater.cu
+
+$(OBJ_DIR)/sph_taitwater_cubin.h: $(OBJ_DIR)/sph_taitwater.cubin $(OBJ_DIR)/sph_taitwater.cubin
+	$(BIN2C) -c -n sph_taitwater $(OBJ_DIR)/sph_taitwater.cubin > $(OBJ_DIR)/sph_taitwater_cubin.h
+
+$(OBJ_DIR)/lal_sph_taitwater.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater.cpp $(OBJ_DIR)/sph_taitwater_cubin.h $(OBJ_DIR)/lal_base_atomic.o
+	$(CUDR) -o $@ -c lal_sph_taitwater.cpp -I$(OBJ_DIR)
+
+$(OBJ_DIR)/lal_sph_taitwater_ext.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater_ext.cpp lal_base_atomic.h
+	$(CUDR) -o $@ -c lal_sph_taitwater_ext.cpp -I$(OBJ_DIR)
+
+
+
 
 $(OBJ_DIR)/lj_coul_msm.cubin: lal_lj_coul_msm.cu lal_precision.h lal_preprocessor.h
 	$(CUDA) --cubin -DNV_KERNEL -o $@ lal_lj_coul_msm.cu
