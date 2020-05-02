@@ -109,8 +109,6 @@ FixMesoBoussinesq::FixMesoBoussinesq(LAMMPS *lmp, int narg, char **arg) :
   }
 
   // initializations
-
-  degree2rad = MY_PI/180.0;
   time_origin = update->ntimestep;
 
   eflag = 0;
