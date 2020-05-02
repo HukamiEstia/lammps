@@ -13,21 +13,21 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/idealgas,PairSPHIdealGas)
+PairStyle(sph/idealgas/sutherland,PairSPHIdealGasSutherland)
 
 #else
 
-#ifndef LMP_PAIR_IDEALGAS_H
-#define LMP_PAIR_IDEALGAS_H
+#ifndef LMP_PAIR_IDEALGAS_SUTHERLAND_H
+#define LMP_PAIR_IDEALGAS_SUTHERLAND_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHIdealGas : public Pair {
+class PairSPHIdealGasSutherland : public Pair {
  public:
-  PairSPHIdealGas(class LAMMPS *);
-  virtual ~PairSPHIdealGas();
+  PairSPHIdealGasSutherland(class LAMMPS *);
+  virtual ~PairSPHIdealGasSutherland();
   virtual void compute(int, int);
   void settings(int, char **);
   void coeff(int, char **);
@@ -35,7 +35,8 @@ class PairSPHIdealGas : public Pair {
   virtual double single(int, int, int, int, double, double, double, double &);
 
  protected:
-  double **cut,**viscosity;
+   double  *gamma, *b, *S;
+   double **cut;
 
   void allocate();
 };

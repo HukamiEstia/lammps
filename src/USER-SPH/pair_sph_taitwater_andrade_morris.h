@@ -34,7 +34,7 @@ class PairSPHTaitwaterAndradeMorris : public Pair {
   virtual double init_one(int, int);
 
  protected:
-  double *rho0, *soundspeed, *A, *B;
+  double *rho0, *soundspeed, *A, *B, *C;
   double **cut;
   int first;
 

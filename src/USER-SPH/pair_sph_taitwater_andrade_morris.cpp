@@ -54,18 +54,21 @@ void PairSPHTaitwaterAndradeMorris::compute(int eflag, int vflag) {
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq, velx, vely, velz;
-  double rsq, tmp, wfd, delVdotDelR, deltaE;
+  double vxtmp, vytmp, vztmp, rsq, tmp, r, wf, wfd, delVdotDelR, h, ih, ihsq, velx, vely, velz;
+  double imass, jmass, fi, fj, fvisc, ivisc, jvisc, ijvisc, Ti, Tj, deltaE;
 
   ev_init(eflag, vflag);
 
   double **v = atom->vest;
   double **x = atom->x;
   double **f = atom->f;
+  double *e = atom->e;
   double *rho = atom->rho;
   double *mass = atom->mass;
   double *de = atom->de;
   double *drho = atom->drho;
+  double *cv = atom->cv;
+  double *nu = atom->nu;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   int newton_pair = force->newton_pair;
@@ -113,7 +116,12 @@ void PairSPHTaitwaterAndradeMorris::compute(int eflag, int vflag) {
     // compute pressure of atom i with Tait EOS
     tmp = rho[i] / rho0[itype];
     fi = tmp * tmp * tmp;
-    fi = B[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
+    fi = C[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
+
+    // compute temperature of atom i and Andrade viscosity
+    Ti = e[i] / cv[i];
+    nu[i] = A[itype] * exp(B[itype]/Ti);
+    // printf("e: %f, temp: %f, visc: %f\n", e[i], Ti, nu[i]);
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
@@ -125,13 +133,19 @@ void PairSPHTaitwaterAndradeMorris::compute(int eflag, int vflag) {
       rsq = delx * delx + dely * dely + delz * delz;
       jtype = type[j];
       jmass = mass[jtype];
+      // compute temperature of atom i and Andrade viscosity
+      Tj = e[j] / cv[j];
+      nu[j] = A[jtype] * exp(B[jtype]/Tj);
+      // printf("e: %f, temp: %f, visc: %f\n", e[j], Tj, nu[j]);
 
       if (rsq < cutsq[itype][jtype]) {
         h = cut[itype][jtype];
         ih = 1.0 / h;
         ihsq = ih * ih;
 
-        wfd = h - sqrt(rsq);
+        r = sqrt(rsq);
+        wf = (h - r) * ihsq;
+        wfd = h - r;
         if (domain->dimension == 3) {
           // Lucy Kernel, 3d
           // Note that wfd, the derivative of the weight function with respect to r,
@@ -139,16 +153,18 @@ void PairSPHTaitwaterAndradeMorris::compute(int eflag, int vflag) {
           // The missing factor of r is recovered by
           // (1) using delV . delX instead of delV . (delX/r) and
           // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
+          wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
           wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
         } else {
           // Lucy Kernel, 2d
+          wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
           wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
         }
 
         // compute pressure  of atom j with Tait EOS
         tmp = rho[j] / rho0[jtype];
         fj = tmp * tmp * tmp;
-        fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+        fj = C[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
 
         velx=vxtmp - v[j][0];
         vely=vytmp - v[j][1];
@@ -157,9 +173,13 @@ void PairSPHTaitwaterAndradeMorris::compute(int eflag, int vflag) {
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * velx + dely * vely + delz * velz;
 
+        // averaged artificial viscosities
+        ivisc = 8 * nu[i] / (rho[i] * soundspeed[itype] * h); 
+        jvisc = 8 * nu[j] / (rho[j] * soundspeed[jtype] * h);
+        ijvisc = wf * (imass * ivisc + jmass * jvisc) / (rho[i] + rho[j]);
+        
         // Morris Viscosity (Morris, 1996)
-
-        fvisc = 2 * viscosity[itype][jtype] / (rho[i] * rho[j]);
+        fvisc = 2 * ijvisc / (rho[i] * rho[j]);
 
         fvisc *= imass * jmass * wfd;
 
@@ -213,9 +233,10 @@ void PairSPHTaitwaterAndradeMorris::allocate() {
 
   memory->create(rho0, n + 1, "pair:rho0");
   memory->create(soundspeed, n + 1, "pair:soundspeed");
-  memory->create(B, n + 1, "pair:B");
   memory->create(cut, n + 1, n + 1, "pair:cut");
-  memory->create(viscosity, n + 1, n + 1, "pair:viscosity");
+  memory->create(A, n + 1, "pair:A");
+  memory->create(B, n + 1, "pair:B");
+  memory->create(C, n + 1, "pair:C");
 }
 
 /* ----------------------------------------------------------------------
@@ -233,7 +254,7 @@ void PairSPHTaitwaterAndradeMorris::settings(int narg, char **/*arg*/) {
  ------------------------------------------------------------------------- */
 
 void PairSPHTaitwaterAndradeMorris::coeff(int narg, char **arg) {
-  if (narg != 6)
+  if (narg != 7)
     error->all(FLERR,
         "Incorrect args for pair_style sph/taitwater/andrade/morris coefficients");
   if (!allocated)
@@ -245,20 +266,21 @@ void PairSPHTaitwaterAndradeMorris::coeff(int narg, char **arg) {
 
   double rho0_one = force->numeric(FLERR,arg[2]);
   double soundspeed_one = force->numeric(FLERR,arg[3]);
-  double viscosity_one = force->numeric(FLERR,arg[4]);
-  double cut_one = force->numeric(FLERR,arg[5]);
-  double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
+  double A_one = force->numeric(FLERR,arg[4]);
+  double B_one = force->numeric(FLERR,arg[5]);
+  double cut_one = force->numeric(FLERR,arg[6]);
+  double C_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     rho0[i] = rho0_one;
     soundspeed[i] = soundspeed_one;
+    A[i] = A_one;
     B[i] = B_one;
+    C[i] = C_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
       //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
       cut[i][j] = cut_one;
-
       setflag[i][j] = 1;
       count++;
     }
@@ -279,7 +301,6 @@ double PairSPHTaitwaterAndradeMorris::init_one(int i, int j) {
   }
 
   cut[j][i] = cut[i][j];
-  viscosity[j][i] = viscosity[i][j];
 
   return cut[i][j];
 }

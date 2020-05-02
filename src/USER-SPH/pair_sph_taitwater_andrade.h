@@ -34,8 +34,8 @@ class PairSPHTaitwaterAndrade : public Pair {
   virtual double init_one(int, int);
 
  protected:
-  double *rho0, *soundspeed, *B;
-  double **cut, **viscosity;
+  double *rho0, *soundspeed, *A, *B, *C;
+  double **cut;
   int first;
 
   void allocate();

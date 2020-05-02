@@ -54,8 +54,8 @@ void PairSPHTaitwaterAndrade::compute(int eflag, int vflag) {
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq;
-  double rsq, tmp, r, wf, wfd, delVdotDelR, mu, ivisc, jvisc, ijvisc, Ti, Tj, deltaE;
+  double vxtmp, vytmp, vztmp, rsq, tmp, r, wf, wfd, delVdotDelR, h, ih, ihsq, velx, vely, velz;
+  double imass, jmass, fi, fj, mu, fvisc, ivisc, jvisc, ijvisc, Ti, Tj, deltaE;
 
   ev_init(eflag, vflag);
 
@@ -116,7 +116,7 @@ void PairSPHTaitwaterAndrade::compute(int eflag, int vflag) {
     // compute pressure of atom i with Tait EOS
     tmp = rho[i] / rho0[itype];
     fi = tmp * tmp * tmp;
-    fi = B[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
+    fi = C[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
 
     // compute temperature of atom i and Andrade viscosity
     Ti = e[i] / cv[i];
@@ -166,7 +166,7 @@ void PairSPHTaitwaterAndrade::compute(int eflag, int vflag) {
         // compute pressure  of atom j with Tait EOS
         tmp = rho[j] / rho0[jtype];
         fj = tmp * tmp * tmp;
-        fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+        fj = C[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
 
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
@@ -237,6 +237,7 @@ void PairSPHTaitwaterAndrade::allocate() {
   memory->create(cut, n + 1, n + 1, "pair:cut");
   memory->create(A, n + 1, "pair:A");
   memory->create(B, n + 1, "pair:B");
+  memory->create(C, n + 1, "pair:C");
 }
 
 /* ----------------------------------------------------------------------
@@ -269,14 +270,16 @@ void PairSPHTaitwaterAndrade::coeff(int narg, char **arg) {
   double A_one = force->numeric(FLERR,arg[4]);
   double B_one = force->numeric(FLERR,arg[5]);
   double cut_one = force->numeric(FLERR,arg[6]);
+  double C_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     rho0[i] = rho0_one;
     soundspeed[i] = soundspeed_one;
+    A[i] = A_one;
+    B[i] = B_one;
+    C[i] = C_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      A[i] = A_one;
-      B[i] = B_one;
       //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
       cut[i][j] = cut_one;
       setflag[i][j] = 1;

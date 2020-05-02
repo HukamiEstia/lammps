@@ -11,7 +11,7 @@
  See the README file in the top-level LAMMPS directory.
  ------------------------------------------------------------------------- */
 
-#include "pair_sph_idealgas.h"
+#include "pair_sph_idealgas_sutherland.h"
 #include <cmath>
 #include "atom.h"
 #include "force.h"
@@ -24,32 +24,33 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHIdealGas::PairSPHIdealGas(LAMMPS *lmp) : Pair(lmp)
+PairSPHIdealGasSutherland::PairSPHIdealGasSutherland(LAMMPS *lmp) : Pair(lmp)
 {
   restartinfo = 0;
 }
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHIdealGas::~PairSPHIdealGas() {
+PairSPHIdealGasSutherland::~PairSPHIdealGasSutherland() {
   if (allocated) {
     memory->destroy(setflag);
     memory->destroy(cutsq);
 
     memory->destroy(cut);
-    memory->destroy(viscosity);
+    memory->destroy(b);
+    memory->destroy(S);
   }
 }
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPHIdealGas::compute(int eflag, int vflag) {
+void PairSPHIdealGasSutherland::compute(int eflag, int vflag) {
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq;
-  double rsq, wfd, delVdotDelR, mu, deltaE, ci, cj;
+  double vxtmp, vytmp, vztmp, r, rsq, wf, wfd, delVdotDelR, h, ih, ihsq;
+  double imass, jmass, mu, fi, fj, fvisc, ivisc, jvisc, ijvisc, Ti, Tj, deltaE, ci, cj;
 
   ev_init(eflag, vflag);
 
@@ -70,8 +71,6 @@ void PairSPHIdealGas::compute(int eflag, int vflag) {
   numneigh = list->numneigh;
   firstneigh = list->firstneigh;
 
-  // loop over neighbors of my atoms
-
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     xtmp = x[i][0];
@@ -86,9 +85,14 @@ void PairSPHIdealGas::compute(int eflag, int vflag) {
 
     imass = mass[itype];
 
-    fi = 0.4 * e[i] / imass / rho[i]; // ideal gas EOS; this expression is fi = pressure / rho^2
-    ci = sqrt(0.4*e[i]/imass); // speed of sound with heat capacity ratio gamma=1.4
+    fi = (gamma[itype] - 1) * e[i] / imass / rho[i]; // ideal gas EOS; this expression is fi = pressure / rho^2
+    ci = sqrt((gamma[itype] - 1)*e[i]/imass); // parametarable gamma
 
+    // compute temperature of atom i and Sutherland viscosity
+    Ti = e[i] / cv[i];
+    nu[i] = b[itype] * sqrt(Ti * Ti * Ti) / (Ti + S[itype]);
+
+    // loop over neighbors of my atoms
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
       j &= NEIGHMASK;
@@ -105,7 +109,9 @@ void PairSPHIdealGas::compute(int eflag, int vflag) {
         ih = 1. / h;
         ihsq = ih * ih;
 
-        wfd = h - sqrt(rsq);
+        r = sqrt(rsq);
+        wf = (h - r) * ihsq;
+        wfd = h - r;
         if (domain->dimension == 3) {
           // Lucy Kernel, 3d
           // Note that wfd, the derivative of the weight function with respect to r,
@@ -113,23 +119,28 @@ void PairSPHIdealGas::compute(int eflag, int vflag) {
           // The missing factor of r is recovered by
           // (1) using delV . delX instead of delV . (delX/r) and
           // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
+          wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
           wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
         } else {
           // Lucy Kernel, 2d
+          wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
           wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
         }
 
-        fj = 0.4 * e[j] / jmass / rho[j];
+        fj = (gamme[jtype] - 1) * e[j] / jmass / rho[j];
 
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
             + delz * (vztmp - v[j][2]);
 
-        // artificial viscosity (Monaghan 1992)
+        // averaged artificial viscosities
         if (delVdotDelR < 0.) {
-          cj = sqrt(0.4*e[j]/jmass);
+          cj = sqrt((gamme[jtype] - 1)*e[j]/jmass);
           mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-          fvisc = -viscosity[itype][jtype] * (ci + cj) * mu / (rho[i] + rho[j]);
+          ivisc = 8 * nu[i] / (rho[i] * soundspeed[itype] * h);
+          jvisc = 8 * nu[j] / (rho[j] * soundspeed[jtype] * h);
+          ijvisc = wf * (imass * ivisc + jmass * jvisc) / (rho[i] + rho[j]);
+          fvisc = -ijvisc * (ci + cj) * mu / (rho[i] + rho[j]);
         } else {
           fvisc = 0.;
         }
@@ -173,7 +184,7 @@ void PairSPHIdealGas::compute(int eflag, int vflag) {
  allocate all arrays
  ------------------------------------------------------------------------- */
 
-void PairSPHIdealGas::allocate() {
+void PairSPHIdealGasSutherland::allocate() {
   allocated = 1;
   int n = atom->ntypes;
 
@@ -185,14 +196,16 @@ void PairSPHIdealGas::allocate() {
   memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
 
   memory->create(cut, n + 1, n + 1, "pair:cut");
-  memory->create(viscosity, n + 1, n + 1, "pair:viscosity");
+  memory->create(b, n + 1, "pair:b");
+  memory->create(S, n + 1, "pair:S");
+
 }
 
 /* ----------------------------------------------------------------------
  global settings
  ------------------------------------------------------------------------- */
 
-void PairSPHIdealGas::settings(int narg, char **/*arg*/) {
+void PairSPHIdealGasSutherland::settings(int narg, char **/*arg*/) {
   if (narg != 0)
     error->all(FLERR,
         "Illegal number of arguments for pair_style sph/idealgas");
@@ -202,7 +215,7 @@ void PairSPHIdealGas::settings(int narg, char **/*arg*/) {
  set coeffs for one or more type pairs
  ------------------------------------------------------------------------- */
 
-void PairSPHIdealGas::coeff(int narg, char **arg) {
+void PairSPHIdealGasSutherland::coeff(int narg, char **arg) {
   if (narg != 4)
     error->all(FLERR,"Incorrect number of args for pair_style sph/idealgas coefficients");
   if (!allocated)
@@ -212,13 +225,17 @@ void PairSPHIdealGas::coeff(int narg, char **arg) {
   force->bounds(FLERR,arg[0], atom->ntypes, ilo, ihi);
   force->bounds(FLERR,arg[1], atom->ntypes, jlo, jhi);
 
-  double viscosity_one = force->numeric(FLERR,arg[2]);
-  double cut_one = force->numeric(FLERR,arg[3]);
+  double gamma_one = force->numeric(FLERR,arg[2]);
+  double b_one = force->numeric(FLERR,arg[3]);
+  double S_one = force->numeric(FLERR,arg[4]);
+  double cut_one = force->numeric(FLERR,arg[5]);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
+    gamma[i] = gamma_one;
+    b[i] = b_one;
+    S[i] = S_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
       //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
       cut[i][j] = cut_one;
       setflag[i][j] = 1;
@@ -234,7 +251,7 @@ void PairSPHIdealGas::coeff(int narg, char **arg) {
  init for one type pair i,j and corresponding j,i
  ------------------------------------------------------------------------- */
 
-double PairSPHIdealGas::init_one(int i, int j) {
+double PairSPHIdealGasSutherland::init_one(int i, int j) {
 
   if (setflag[i][j] == 0) {
       error->all(FLERR,"All pair sph/idealgas coeffs are not set");
@@ -247,7 +264,7 @@ double PairSPHIdealGas::init_one(int i, int j) {
 
 /* ---------------------------------------------------------------------- */
 
-double PairSPHIdealGas::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
+double PairSPHIdealGasSutherland::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
     double /*rsq*/, double /*factor_coul*/, double /*factor_lj*/, double &fforce) {
   fforce = 0.0;
 
