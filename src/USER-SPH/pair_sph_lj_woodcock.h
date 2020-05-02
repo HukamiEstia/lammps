@@ -13,21 +13,21 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/lj,PairSPHLJ)
+PairStyle(sph/lj/woodcock,PairSPHLJWoodCock)
 
 #else
 
-#ifndef LMP_PAIR_LJ_H
-#define LMP_PAIR_LJ_H
+#ifndef LMP_PAIR_LJ_WOODCOCK_H
+#define LMP_PAIR_LJ_WOODCOCK_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHLJ : public Pair {
+class PairSPHLJWoodcock : public Pair {
  public:
-  PairSPHLJ(class LAMMPS *);
-  virtual ~PairSPHLJ();
+  PairSPHLJWoodcock(class LAMMPS *);
+  virtual ~PairSPHLJWoodcock();
   virtual void compute(int, int);
   void settings(int, char **);
   void coeff(int, char **);
