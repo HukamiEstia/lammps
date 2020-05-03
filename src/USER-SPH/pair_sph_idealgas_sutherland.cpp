@@ -62,6 +62,8 @@ void PairSPHIdealGasSutherland::compute(int eflag, int vflag) {
   double *de = atom->de;
   double *e = atom->e;
   double *drho = atom->drho;
+  double *cv = atom->cv;
+  double *nu = atom->nu;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   int newton_pair = force->newton_pair;
@@ -127,7 +129,7 @@ void PairSPHIdealGasSutherland::compute(int eflag, int vflag) {
           wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
         }
 
-        fj = (gamme[jtype] - 1) * e[j] / jmass / rho[j];
+        fj = (gamma[jtype] - 1) * e[j] / jmass / rho[j];
 
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
@@ -135,10 +137,10 @@ void PairSPHIdealGasSutherland::compute(int eflag, int vflag) {
 
         // averaged artificial viscosities
         if (delVdotDelR < 0.) {
-          cj = sqrt((gamme[jtype] - 1)*e[j]/jmass);
+          cj = sqrt((gamma[jtype] - 1)*e[j]/jmass);
           mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-          ivisc = 8 * nu[i] / (rho[i] * soundspeed[itype] * h);
-          jvisc = 8 * nu[j] / (rho[j] * soundspeed[jtype] * h);
+          ivisc = 8 * nu[i] / (rho[i] * ci * h);
+          jvisc = 8 * nu[j] / (rho[j] * cj * h);
           ijvisc = wf * (imass * ivisc + jmass * jvisc) / (rho[i] + rho[j]);
           fvisc = -ijvisc * (ci + cj) * mu / (rho[i] + rho[j]);
         } else {

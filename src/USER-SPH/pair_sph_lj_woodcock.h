@@ -13,7 +13,7 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/lj/woodcock,PairSPHLJWoodCock)
+PairStyle(sph/lj/woodcock,PairSPHLJWoodcock)
 
 #else
 

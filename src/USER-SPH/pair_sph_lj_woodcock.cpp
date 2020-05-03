@@ -11,7 +11,7 @@
  See the README file in the top-level LAMMPS directory.
  ------------------------------------------------------------------------- */
 
-#include "pair_sph_lj.h"
+#include "pair_sph_lj_woodcock.h"
 #include <cmath>
 #include "atom.h"
 #include "force.h"
@@ -24,14 +24,14 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHLJ::PairSPHLJ(LAMMPS *lmp) : Pair(lmp)
+PairSPHLJWoodcock::PairSPHLJWoodcock(LAMMPS *lmp) : Pair(lmp)
 {
   restartinfo = 0;
 }
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHLJ::~PairSPHLJ() {
+PairSPHLJWoodcock::~PairSPHLJWoodcock() {
   if (allocated) {
     memory->destroy(setflag);
     memory->destroy(cutsq);
@@ -43,7 +43,7 @@ PairSPHLJ::~PairSPHLJ() {
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPHLJ::compute(int eflag, int vflag) {
+void PairSPHLJWoodcock::compute(int eflag, int vflag) {
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
@@ -180,7 +180,7 @@ void PairSPHLJ::compute(int eflag, int vflag) {
  allocate all arrays
  ------------------------------------------------------------------------- */
 
-void PairSPHLJ::allocate() {
+void PairSPHLJWoodcock::allocate() {
   allocated = 1;
   int n = atom->ntypes;
 
@@ -199,7 +199,7 @@ void PairSPHLJ::allocate() {
  global settings
  ------------------------------------------------------------------------- */
 
-void PairSPHLJ::settings(int narg, char **/*arg*/) {
+void PairSPHLJWoodcock::settings(int narg, char **/*arg*/) {
   if (narg != 0)
     error->all(FLERR,
         "Illegal number of arguments for pair_style sph/lj");
@@ -209,7 +209,7 @@ void PairSPHLJ::settings(int narg, char **/*arg*/) {
  set coeffs for one or more type pairs
  ------------------------------------------------------------------------- */
 
-void PairSPHLJ::coeff(int narg, char **arg) {
+void PairSPHLJWoodcock::coeff(int narg, char **arg) {
   if (narg != 4)
     error->all(FLERR,
         "Incorrect args for pair_style sph/lj coefficients");
@@ -242,7 +242,7 @@ void PairSPHLJ::coeff(int narg, char **arg) {
  init for one type pair i,j and corresponding j,i
  ------------------------------------------------------------------------- */
 
-double PairSPHLJ::init_one(int i, int j) {
+double PairSPHLJWoodcock::init_one(int i, int j) {
 
   if (setflag[i][j] == 0) {
     error->all(FLERR,"All pair sph/lj coeffs are not set");
@@ -256,7 +256,7 @@ double PairSPHLJ::init_one(int i, int j) {
 
 /* ---------------------------------------------------------------------- */
 
-double PairSPHLJ::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
+double PairSPHLJWoodcock::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
     double /*rsq*/, double /*factor_coul*/, double /*factor_lj*/, double &fforce) {
   fforce = 0.0;
 
@@ -264,7 +264,7 @@ double PairSPHLJ::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
 }
 
 
-/*double PairSPHLJ::LJEOS2(double rho, double e, double cv) {
+/*double PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv) {
 
 
   double T = e / cv;
@@ -295,7 +295,7 @@ double PairSPHLJ::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtype*/,
    Journal of Chemical Physics 73 pp. 5401-5403 (1980)
 */
 
-void PairSPHLJ::LJEOS2(double rho, double e, double cv, double *p, double *c) {
+void PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv, double *p, double *c) {
   double T = e/cv;
   double beta = 1.0 / T;
   double beta_sqrt = sqrt(beta);
@@ -332,7 +332,7 @@ void PairSPHLJ::LJEOS2(double rho, double e, double cv, double *p, double *c) {
 /* Jirí Kolafa, Ivo Nezbeda
  * "The Lennard-Jones fluid: an accurate analytic and theoretically-based equation of state",
  *  Fluid Phase Equilibria 100 pp. 1-34 (1994) */
-/*double PairSPHLJ::LJEOS2(double rho, double e, double cv) {
+/*double PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv) {
  double T = e / cv;
 
  double sT = sqrt(T);
