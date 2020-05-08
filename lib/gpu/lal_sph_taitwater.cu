@@ -1,32 +1,22 @@
-// **************************************************************************
-//                                   soft.cu
-//                             -------------------
-//                           Trung Dac Nguyen (ORNL)
-//
-//  Device code for acceleration of the soft pair style
-//
-// __________________________________________________________________________
-//    This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
-// __________________________________________________________________________
-//
-//    begin                :
-//    email                : nguyentd@ornl.gov
-// ***************************************************************************/
+
 
 #ifdef NV_KERNEL
 #include "lal_aux_fun1.h"
 #ifndef _DOUBLE_DOUBLE
 texture<float4> pos_tex;
+texture<float4> vel_tex;
 #else
 texture<int4,1> pos_tex;
+texture<int4,1> vel_tex;
 #endif
 #else
 #define pos_tex x_
+#define vel_tex v_
 #endif
 
-#define MY_PI (acctyp)3.14159265358979323846
 
 __kernel void k_sph_taitwater(const __global numtyp4 *restrict x_,
+const __global numtyp4 *restrict v_, 
                      const __global numtyp4 *restrict coeff,
                      const int lj_types,
                      const __global numtyp *restrict sp_lj_in,
@@ -37,6 +27,8 @@ __kernel void k_sph_taitwater(const __global numtyp4 *restrict x_,
                      const int eflag, const int vflag, const int inum,
                      const int nbor_pitch, const int t_per_atom) {
   int tid, ii, offset;
+  double imass,  tmp,fi,jmass,h, ih, ihsq,wfd,fj,delVdotDelR,mu,fvisc;
+  double *rho,*rho0,*B,*soundspeed, *mass;
   atom_info(t_per_atom,ii,tid,offset);
 
   __local numtyp sp_lj[4];
@@ -61,8 +53,15 @@ __kernel void k_sph_taitwater(const __global numtyp4 *restrict x_,
 
     numtyp4 ix; fetch4(ix,i,pos_tex); //x_[i];
     int itype=ix.w;
-
-    numtyp factor_lj;
+	numtyp4 iv; fetch4(iv,i,vel_tex); //v_[i];
+    int itag=iv.w;
+    acctyp factor_lj;
+	 imass = mass[itype];
+	//compute pressure of atom i with Tait EOS
+	tmp = rho[i]/rho0[itype];
+	 fi = tmp * tmp * tmp;
+	fi=B[itype] * (fi * fi * tmp - 1.0) / (rho[i]* rho[i]);
+	
     for ( ; nbor<nbor_end; nbor+=n_stride) {
 
       int j=dev_packed[nbor];
@@ -71,37 +70,58 @@ __kernel void k_sph_taitwater(const __global numtyp4 *restrict x_,
 
       numtyp4 jx; fetch4(jx,j,pos_tex); //x_[j];
       int jtype=jx.w;
+	  numtyp4 jv; fetch4(jv,j,vel_tex); //v_[j];
+      int jtag=jv.w;
 
       // Compute r12
-      numtyp delx = ix.x-jx.x;
-      numtyp dely = ix.y-jx.y;
-      numtyp delz = ix.z-jx.z;
-      numtyp rsq = delx*delx+dely*dely+delz*delz;
-
+      numtyp delvx = iv.x-jv.x;
+      numtyp delvy = iv.y-jv.y;
+      numtyp delvz = iv.z-jv.z;
+      numtyp rsq = delvx*delvx+delvy*delvy+delvz*delvz;
+	  jmass = mass[jtype];
       int mtype=itype*lj_types+jtype;
       if (rsq<coeff[mtype].z) {
-        numtyp force;
-        numtyp r = ucl_sqrt(rsq);
-        numtyp arg = MY_PI*r/coeff[mtype].y;
-        if (r > (numtyp)0.0) force = factor_lj * coeff[mtype].x *
-                       sin(arg) * MY_PI/coeff[mtype].y*ucl_recip(r);
-        else force = (numtyp)0.0;
-
-        f.x+=delx*force;
-        f.y+=dely*force;
-        f.z+=delz*force;
+      
+	   h = coeff[mtype].z;
+	   ih = 1.0 / h;
+       ihsq = ih * ih;
+       wfd = h - sqrt(rsq);
+        
+       wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
+		// compute pressure  of atom j with Tait EOS
+        tmp = rho[j]/ rho[jtype];
+        fj = tmp * tmp * tmp;
+        fj = B[jtype]* (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+		// dot product of velocity delta and distance vector
+        delVdotDelR = delvx * (iv.x - jv.x) + delvy * (iv.y - jv.y)
+            + delvz * (iv.z - jv.z);
+			if (delVdotDelR < 0.) {
+          mu = h * delVdotDelR / (rsq + 0.01 * h * h);
+          fvisc = -coeff[mtype].y * (soundspeed[itype]
+              + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
+        } else {
+          fvisc = 0.;
+        }
+			
+			numtyp force = (numtyp)0.0;
+			force=-imass * jmass * (fi + fj + fvisc) * wfd;
+			numtyp deltaE = -0.5 * force * delVdotDelR;
+			
+        f.x+=delvx*force;
+        f.y+=delvy*force;
+        f.z+=delvz*force;
 
         if (eflag>0) {
-          numtyp e=coeff[mtype].x * ((numtyp)1.0+cos(arg));
-          energy+=factor_lj*e;
+          
+          energy+=deltaE;
         }
         if (vflag>0) {
-          virial[0] += delx*delx*force;
-          virial[1] += dely*dely*force;
-          virial[2] += delz*delz*force;
-          virial[3] += delx*dely*force;
-          virial[4] += delx*delz*force;
-          virial[5] += dely*delz*force;
+          virial[0] += delvx*delvx*force;
+          virial[1] += delvy*delvy*force;
+          virial[2] += delvz*delvz*force;
+          virial[3] += delvx*delvy*force;
+          virial[4] += delvx*delvz*force;
+          virial[5] += delvy*delvz*force;
         }
       }
 
@@ -170,9 +190,9 @@ __kernel void k_sph_taitwater_fast(const __global numtyp4 *restrict x_,
       if (rsq<coeff[mtype].z) {
         numtyp force;
         numtyp r = ucl_sqrt(rsq);
-        numtyp arg = MY_PI*r/coeff[mtype].y;
+        numtyp arg = r/coeff[mtype].y;
         if (r > (numtyp)0.0) force = factor_lj * coeff[mtype].x *
-                       sin(arg) * MY_PI/coeff[mtype].y*ucl_recip(r);
+                       sin(arg) *coeff[mtype].y*ucl_recip(r);
         else force = (numtyp)0.0;
 
         f.x+=delx*force;

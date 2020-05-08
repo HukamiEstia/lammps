@@ -30,6 +30,7 @@ OBJS = $(OBJ_DIR)/lal_atom.o $(OBJ_DIR)/lal_ans.o \
        $(OBJ_DIR)/lal_base_charge.o $(OBJ_DIR)/lal_base_ellipsoid.o \
        $(OBJ_DIR)/lal_base_dipole.o $(OBJ_DIR)/lal_base_three.o \
        $(OBJ_DIR)/lal_base_dpd.o \
+	   $(OBJ_DIR)/lal_base_sphatomic.o \
        $(OBJ_DIR)/lal_pppm.o $(OBJ_DIR)/lal_pppm_ext.o \
        $(OBJ_DIR)/lal_gayberne.o $(OBJ_DIR)/lal_gayberne_ext.o \
        $(OBJ_DIR)/lal_re_squared.o $(OBJ_DIR)/lal_re_squared_ext.o \
@@ -216,7 +217,10 @@ $(OBJ_DIR)/lal_device.o: lal_device.cpp lal_device.h $(ALL_H) $(OBJ_DIR)/device_
 
 $(OBJ_DIR)/lal_base_atomic.o: $(ALL_H) lal_base_atomic.h lal_base_atomic.cpp
 	$(CUDR) -o $@ -c lal_base_atomic.cpp
-
+	
+$(OBJ_DIR)/lal_base_sphatomic.o: $(ALL_H) lal_base_sphatomic.h lal_base_sphatomic.cpp
+	$(CUDR) -o $@ -c lal_base_sphatomic.cpp
+	
 $(OBJ_DIR)/lal_base_charge.o: $(ALL_H) lal_base_charge.h lal_base_charge.cpp
 	$(CUDR) -o $@ -c lal_base_charge.cpp
 
@@ -715,10 +719,10 @@ $(OBJ_DIR)/sph_taitwater.cubin: lal_sph_taitwater.cu lal_precision.h lal_preproc
 $(OBJ_DIR)/sph_taitwater_cubin.h: $(OBJ_DIR)/sph_taitwater.cubin $(OBJ_DIR)/sph_taitwater.cubin
 	$(BIN2C) -c -n sph_taitwater $(OBJ_DIR)/sph_taitwater.cubin > $(OBJ_DIR)/sph_taitwater_cubin.h
 
-$(OBJ_DIR)/lal_sph_taitwater.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater.cpp $(OBJ_DIR)/sph_taitwater_cubin.h $(OBJ_DIR)/lal_base_atomic.o
+$(OBJ_DIR)/lal_sph_taitwater.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater.cpp $(OBJ_DIR)/sph_taitwater_cubin.h $(OBJ_DIR)/lal_base_sphatomic.o
 	$(CUDR) -o $@ -c lal_sph_taitwater.cpp -I$(OBJ_DIR)
 
-$(OBJ_DIR)/lal_sph_taitwater_ext.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater_ext.cpp lal_base_atomic.h
+$(OBJ_DIR)/lal_sph_taitwater_ext.o: $(ALL_H) lal_sph_taitwater.h lal_sph_taitwater_ext.cpp lal_base_sphatomic.h
 	$(CUDR) -o $@ -c lal_sph_taitwater_ext.cpp -I$(OBJ_DIR)
 
 

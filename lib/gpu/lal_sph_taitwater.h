@@ -16,12 +16,12 @@
 #ifndef LAL_SPH_TAITWATER_H
 #define LAL_SPH_TAITWATER_H
 
-#include "lal_base_atomic.h"
+#include "lal_base_sphatomic.h"
 
 namespace LAMMPS_AL {
 
 template <class numtyp, class acctyp>
-class  Sph_taitwater: public BaseAtomic<numtyp, acctyp> {
+class  Sph_taitwater: public BaseAtomicsph<numtyp, acctyp> {
  public:
   Sph_taitwater();
   ~Sph_taitwater();
@@ -40,7 +40,7 @@ class  Sph_taitwater: public BaseAtomic<numtyp, acctyp> {
   int init(const int ntypes, double **host_cutsq,
            double *host_B,
                  double **host_viscosity,double *host_rho0, double **host_cut,
-           double *host_soundspeed,
+           double *host_soundspeed,double *host_special_lj,
            const int nlocal, const int nall, const int max_nbors,
            const int maxspecial, const double cell_size,
            const double gpu_split, FILE *screen);
@@ -60,12 +60,12 @@ class  Sph_taitwater: public BaseAtomic<numtyp, acctyp> {
 
   // --------------------------- TYPE DATA --------------------------
 
-  /// coeff.x = prefactor, coeff.y = cut, coeff.z = cutsq
+  /// coeff.x =cut , coeff.y = viscosity, coeff.z = cutsq
   UCL_D_Vec<numtyp4> coeff;
   /// Special LJ values
   UCL_D_Vec<numtyp> sp_lj;
 
-  /// If atom type constants fit in shared memory, use fast k脽ernels
+  /// If atom type constants fit in shared memory, use fast kernels
   bool shared_types;
 
   /// Number of atom types

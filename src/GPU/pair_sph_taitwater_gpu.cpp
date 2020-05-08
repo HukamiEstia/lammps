@@ -23,21 +23,20 @@
 #include "math_const.h"
 using namespace LAMMPS_NS;
 
-int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *B,double **viscosity ,double *rho0,
-                   double **cut, double *soundspeed, const int nlocal,
+int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *B,double **viscosity ,double *rho0,double **cut, double *soundspeed,double *special_lj, const int nlocal,
                    const int nall, const int max_nbors, const int maxspecial,
                    const double cell_size, int &gpu_mode, FILE *screen);
 void sph_taitwater_gpu_reinit(const int ntypes, double **cutsq, double **host_viscosity,double **host_cut);
 void sph_taitwater_gpu_clear();
 int ** sph_taitwater_gpu_compute_n(const int ago, const int inum,
-                           const int nall, double **host_x, int *host_type,
+                           const int nall, double **host_x, double **host_v,double *host_mass,double int *host_type,
                            double *sublo, double *subhi, tagint *tag, int **nspecial,
                            tagint **special, const bool eflag, const bool vflag,
                            const bool eatom, const bool vatom, int &host_start,
                            int **ilist, int **jnum,
                            const double cpu_time, bool &success);
 void sph_taitwater_gpu_compute(const int ago, const int inum, const int nall,
-                       double **host_x, int *host_type, int *ilist, int *numj,
+                       double **host_x,double **host_v,double *host_mass, int *host_type, int *ilist, int *numj,
                        int **firstneigh, const bool eflag, const bool vflag,
                        const bool eatom, const bool vatom, int &host_start,
                        const double cpu_time, bool &success);
@@ -74,7 +73,7 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
   if (gpu_mode != GPU_FORCE) {
     inum = atom->nlocal;
     firstneigh = sph_taitwater_gpu_compute_n(neighbor->ago, inum, nall,
-                                     atom->x, atom->type, domain->sublo,
+                                     atom->x,atom->v,atom->mass, atom->type, domain->sublo,
                                      domain->subhi, atom->tag, atom->nspecial,
                                      atom->special, eflag, vflag, eflag_atom,
                                      vflag_atom, host_start,
@@ -84,7 +83,8 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
     ilist = list->ilist;
     numneigh = list->numneigh;
     firstneigh = list->firstneigh;
-    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x, atom->type,
+	
+    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x,atom->v,atom->mass, atom->type,
                       ilist, numneigh, firstneigh, eflag, vflag, eflag_atom,
                       vflag_atom, host_start, cpu_time, success);
   }
@@ -130,7 +130,7 @@ void PairSPHTaitwaterGPU::init_style() {
   int maxspecial=0;
   if (atom->molecular)
     maxspecial=atom->maxspecial;
-  int success = sph_taitwater_gpu_init(atom->ntypes+1, cutsq, B, viscosity,rho0,cut,soundspeed, atom->nlocal,
+  int success = sph_taitwater_gpu_init(atom->ntypes+1, cutsq, B, viscosity,rho0,cut,soundspeed, force->special_lj,atom->nlocal,
                               atom->nlocal+atom->nghost, 300, maxspecial,
                               cell_size, gpu_mode, screen);
   GPU_EXTRA::check_flag(success,error,world);
@@ -264,37 +264,35 @@ void PairSPHTaitwaterGPU::cpu_compute(int start, int inum, int eflag, int /* vfl
         /************************************/
        
 	mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-	//printf("mu: %f\n",mu);
-	//printf("mu: %f\n",mu);
-	//printf("delVdotDelR : %f\n",delVdotDelR );
-	//printf("rsq : %f\n",rsq );
-	//printf("h : %f\n",h );
-double m = 1000*(6.00e-03)*(0.045e-03+1.05e-03)/5160;
+	printf("mu: %f\n",mu);
+	printf("mu: %f\n",mu);
+	printf("delVdotDelR : %f\n",delVdotDelR );
+	printf("rsq : %f\n",rsq );
+	printf("h : %f\n",h );
 
-	 //double T =(e[i]/cv[i])+273.15;
-double T = (e[i])/(m*4200)+273.15;
+	 double T =(e[i]/cv[i])+273.15;
 	printf("T: %f\n",T);
 
 	/* four-parameter exponentials*/
 
-     //  double realviscosity1 = (0.00201*exp(1614/T+0.00618*T-1.132e-5*T*T))/rho[i];
-	//printf("real1 four parameter: %f\n",realviscosity1);
+       double realviscosity1 = (0.00201*exp(1614/T+0.00618*T-1.132e-5*T*T))/rho[i];
+	printf("real1 four parameter: %f\n",realviscosity1);
 	/*  kinematic viscosity*/
-	//double realviscosity2 =pow(100, 2.5-log10(T))-0.7;
-	//printf("kinematic parameter: %f\n",realviscosity2);
+	double realviscosity2 =pow(100, 2.5-log10(T))-0.7;
+	printf("kinematic parameter: %f\n",realviscosity2);
 
 
 	/*Two-parameter exponential*/
 	double A =0.00183;
 	double B = 1879.9;
-	double realviscosity = (A*exp(B/T));
+	double realviscosity = (A*exp(B/T))/rho[i];
 	printf("Two parameter: %f\n",realviscosity);
 	
 
 	/*if use this it may lost atoms*/
       	 double viscosity_itype = 8*realviscosity/(h*soundspeed[itype]);
         double viscosity_jtype = 8*realviscosity/(h*soundspeed[jtype]);
-        viscosity[itype][jtype]=((viscosity_itype+viscosity_jtype)/2)*0.000001;
+        viscosity[itype][jtype]=(viscosity_itype+viscosity_jtype)/2;
 	
 	printf("viscosity[itype][jtype]: %f\n",viscosity[itype][jtype]);
 

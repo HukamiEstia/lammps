@@ -18,7 +18,7 @@ namespace LAMMPS_AL {
 extern Device<PRECISION,ACC_PRECISION> device;
 
 template <class numtyp, class acctyp>
-SphTaitwaterT::Sph_taitwater() : BaseAtomic<numtyp,acctyp>(), _allocated(false) {
+SphTaitwaterT::Sph_taitwater() : BaseAtomicsph<numtyp,acctyp>(), _allocated(false) {
 }
 
 template <class numtyp, class acctyp>
@@ -33,8 +33,8 @@ int SphTaitwaterT::bytes_per_atom(const int max_nbors) const {
 
 template <class numtyp, class acctyp>
 int SphTaitwaterT::init(const int ntypes, double **host_cutsq,double *host_B,
-                 double **host_viscosity,double *host_rho0, double **host_cut,
-                 double *host_soundspeed, const int nlocal,
+                 double **host_viscosity,double *host_rho, double **host_cut,
+                 double *host_soundspeed,double *host_special_lj, const int nlocal,
                  const int nall, const int max_nbors,
                  const int maxspecial, const double cell_size,
                  const double gpu_split, FILE *_screen) {
@@ -70,15 +70,17 @@ int SphTaitwaterT::init(const int ntypes, double **host_cutsq,double *host_B,
   coeff.alloc(lj_types*lj_types,*(this->ucl_device),UCL_READ_ONLY);
   this->atom->type_pack4(ntypes,lj_types,coeff,host_write,host_cut,host_viscosity,host_cutsq);
 
+  
   UCL_H_Vec<double> dview;
   sp_lj.alloc(4,*(this->ucl_device),UCL_READ_ONLY);
-  dview.view(host_soundspeed,4,*(this->ucl_device));
+  dview.view(host_special_lj,4,*(this->ucl_device));
   ucl_copy(sp_lj,dview,false);
 
   _allocated=true;
   this->_max_bytes=coeff.row_bytes()+sp_lj.row_bytes();
   return 0;
 }
+
 
 template <class numtyp, class acctyp>
 void SphTaitwaterT::reinit(const int ntypes, double **host_cutsq,double **host_viscosity,double **host_cut ) {
@@ -135,13 +137,13 @@ void SphTaitwaterT::loop(const bool _eflag, const bool _vflag) {
   this->time_pair.start();
   if (shared_types) {
     this->k_pair_fast.set_size(GX,BX);
-    this->k_pair_fast.run(&this->atom->x, &coeff, &sp_lj,
+    this->k_pair_fast.run(&this->atom->x,&coeff, &sp_lj,
                           &this->nbor->dev_nbor, &this->_nbor_data->begin(),
                           &this->ans->force, &this->ans->engv, &eflag, &vflag,
                           &ainum, &nbor_pitch, &this->_threads_per_atom);
   } else {
     this->k_pair.set_size(GX,BX);
-    this->k_pair.run(&this->atom->x, &coeff, &_lj_types, &sp_lj,
+    this->k_pair.run(&this->atom->x,&this->atom->v,&coeff, &_lj_types, &sp_lj,
                      &this->nbor->dev_nbor, &this->_nbor_data->begin(),
                      &this->ans->force, &this->ans->engv, &eflag, &vflag,
                      &ainum, &nbor_pitch, &this->_threads_per_atom);

@@ -1,17 +1,4 @@
-/***************************************************************************
-                                 soft_ext.cpp
-                             -------------------
-                            Trung Dac Nguyen (ORNL)
 
-  Functions for LAMMPS access to soft acceleration routines.
-
- __________________________________________________________________________
-    This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
- __________________________________________________________________________
-
-    begin                :
-    email                : nguyentd@ornl.gov
- ***************************************************************************/
 
 #include <iostream>
 #include <cassert>
@@ -27,10 +14,8 @@ static Sph_taitwater<PRECISION,ACC_PRECISION> SLMF;
 // ---------------------------------------------------------------------------
 // Allocate memory on host and device and copy constants to device
 // ---------------------------------------------------------------------------
-int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *host_B, double **host_viscosity,double *host_rho0,double **host_cut, double *soundspeed,
-                  const int inum, const int nall, const int max_nbors,
-                  const int maxspecial,
-                  const double cell_size, int &gpu_mode, FILE *screen) {
+int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *host_B, double **host_viscosity,double *host_rho0,double **host_cut, double *soundspeed,double *special_lj, const int inum, const int nall, const int max_nbors,const int maxspecial,
+  const double cell_size, int &gpu_mode, FILE *screen) {
   SLMF.clear();
   gpu_mode=SLMF.device->gpu_mode();
   double gpu_split=SLMF.device->particle_split();
@@ -54,7 +39,7 @@ int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *host_B, dou
   int init_ok=0;
   if (world_me==0)
     init_ok=SLMF.init(ntypes, cutsq, host_B, host_viscosity,host_rho0,host_cut,
-                      soundspeed, inum, nall, 300,
+                      soundspeed, special_lj,inum, nall, 300,
                       maxspecial, cell_size, gpu_split, screen);
 
   SLMF.device->world_barrier();
@@ -72,7 +57,7 @@ int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *host_B, dou
     }
     if (gpu_rank==i && world_me!=0)
       init_ok=SLMF.init(ntypes, cutsq, host_B, host_viscosity,host_rho0,host_cut,
-                      soundspeed, inum, nall, 300, maxspecial,
+                      soundspeed, special_lj,inum, nall, 300, maxspecial,
                         cell_size, gpu_split, screen);
 
     SLMF.device->gpu_barrier();
@@ -90,8 +75,8 @@ int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *host_B, dou
 // ---------------------------------------------------------------------------
 // Copy updated constants to device
 // ---------------------------------------------------------------------------
-void sph_taitwater_gpu_reinit(const int ntypes, double **cutsq, double **host_viscosity,
-                  double **host_cut) {
+
+void sph_taitwater_gpu_reinit(const int ntypes, double **cutsq, double **host_viscosity,double **host_cut) {
   int world_me=SLMF.device->world_me();
   int gpu_rank=SLMF.device->gpu_rank();
   int procs_per_gpu=SLMF.device->procs_per_gpu();
@@ -114,23 +99,23 @@ void sph_taitwater_gpu_clear() {
 }
 
 int ** sph_taitwater_gpu_compute_n(const int ago, const int inum_full,
-                           const int nall, double **host_x, int *host_type,
+                           const int nall, double **host_x,double **host_v,double *host_mass, int *host_type,
                            double *sublo, double *subhi, tagint *tag, int **nspecial,
                            tagint **special, const bool eflag, const bool vflag,
                            const bool eatom, const bool vatom, int &host_start,
                            int **ilist, int **jnum, const double cpu_time,
                            bool &success) {
-  return SLMF.compute(ago, inum_full, nall, host_x, host_type, sublo,
+  return SLMF.compute(ago, inum_full, nall, host_x,host_v,host_mass, host_type, sublo,
                       subhi, tag, nspecial, special, eflag, vflag, eatom,
                       vatom, host_start, ilist, jnum, cpu_time, success);
 }
 
 void sph_taitwater_gpu_compute(const int ago, const int inum_full, const int nall,
-                       double **host_x, int *host_type, int *ilist, int *numj,
+                       double **host_x, double **host_v,double *host_mass,int *host_type, int *ilist, int *numj,
                        int **firstneigh, const bool eflag, const bool vflag,
                        const bool eatom, const bool vatom, int &host_start,
                        const double cpu_time, bool &success) {
-  SLMF.compute(ago,inum_full,nall,host_x,host_type,ilist,numj,
+  SLMF.compute(ago,inum_full,nall,host_x,host_v,host_mass,host_type,ilist,numj,
                firstneigh,eflag,vflag,eatom,vatom,host_start,cpu_time,success);
 }
 
