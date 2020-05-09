@@ -177,7 +177,7 @@ inline void BaseAtomicsphT::build_nbor_list(const int inum, const int host_inum,
 // ---------------------------------------------------------------------------
 template <class numtyp, class acctyp>
 void BaseAtomicsphT::compute(const int f_ago, const int inum_full,
-                               const int nall, double **host_x,double **host_v,double *host_mass, int *host_type,
+                               const int nall, double **host_x,double **host_v, int *host_type,
                                int *ilist, int *numj, int **firstneigh,
                                const bool eflag, const bool vflag,
                                const bool eatom, const bool vatom,
@@ -219,7 +219,7 @@ atom->cast_v_data(host_v,host_type);
 // ---------------------------------------------------------------------------
 template <class numtyp, class acctyp>
 int ** BaseAtomicsphT::compute(const int ago, const int inum_full,
-                                 const int nall, double **host_x, double **host_v,double *host_mass,int *host_type,
+                                 const int nall, double **host_x, double **host_v,int *host_type,
                                  double *sublo, double *subhi, tagint *tag,
                                  int **nspecial, tagint **special, const bool eflag,
                                  const bool vflag, const bool eatom,

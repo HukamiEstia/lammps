@@ -125,14 +125,14 @@ class BaseAtomicsph {
 
   /// Pair loop with host neighboring
   void compute(const int f_ago, const int inum_full,
-               const int nall, double **host_x, double **host_v,double *host_mass,int *host_type,
+               const int nall, double **host_x, double **host_v,int *host_type,
                int *ilist, int *numj, int **firstneigh, const bool eflag,
                const bool vflag, const bool eatom, const bool vatom,
                int &host_start, const double cpu_time, bool &success);
 
   /// Pair loop with device neighboring
   int * compute(const int ago, const int inum_full,
-                const int nall, double **host_x, double **host_v,double *host_mass,int *host_type, double *sublo,
+                const int nall, double **host_x, double **host_v,int *host_type, double *sublo,
                 double *subhi, tagint *tag, int **nspecial,
                 tagint **special, const bool eflag, const bool vflag,
                 const bool eatom, const bool vatom, int &host_start,
@@ -140,7 +140,7 @@ class BaseAtomicsph {
 
   /// Pair loop with device neighboring
   int ** compute(const int ago, const int inum_full,
-                 const int nall, double **host_x,double **host_v,double *host_mass, int *host_type, double *sublo,
+                 const int nall, double **host_x,double **host_v, int *host_type, double *sublo,
                  double *subhi, tagint *tag, int **nspecial,
                  tagint **special, const bool eflag, const bool vflag,
                  const bool eatom, const bool vatom, int &host_start,

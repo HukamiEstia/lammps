@@ -26,17 +26,18 @@ using namespace LAMMPS_NS;
 int sph_taitwater_gpu_init(const int ntypes, double **cutsq, double *B,double **viscosity ,double *rho0,double **cut, double *soundspeed,double *special_lj, const int nlocal,
                    const int nall, const int max_nbors, const int maxspecial,
                    const double cell_size, int &gpu_mode, FILE *screen);
+
 void sph_taitwater_gpu_reinit(const int ntypes, double **cutsq, double **host_viscosity,double **host_cut);
+				   
 void sph_taitwater_gpu_clear();
 int ** sph_taitwater_gpu_compute_n(const int ago, const int inum,
-                           const int nall, double **host_x, double **host_v,double *host_mass,double int *host_type,
-                           double *sublo, double *subhi, tagint *tag, int **nspecial,
+                           const int nall, double **host_x, double **host_v,int *host_type, double *sublo, double *subhi, tagint *tag, int **nspecial,
                            tagint **special, const bool eflag, const bool vflag,
                            const bool eatom, const bool vatom, int &host_start,
                            int **ilist, int **jnum,
                            const double cpu_time, bool &success);
 void sph_taitwater_gpu_compute(const int ago, const int inum, const int nall,
-                       double **host_x,double **host_v,double *host_mass, int *host_type, int *ilist, int *numj,
+                       double **host_x,double **host_v,int *host_type, int *ilist, int *numj,
                        int **firstneigh, const bool eflag, const bool vflag,
                        const bool eatom, const bool vatom, int &host_start,
                        const double cpu_time, bool &success);
@@ -73,7 +74,7 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
   if (gpu_mode != GPU_FORCE) {
     inum = atom->nlocal;
     firstneigh = sph_taitwater_gpu_compute_n(neighbor->ago, inum, nall,
-                                     atom->x,atom->v,atom->mass, atom->type, domain->sublo,
+                                     atom->x,atom->v, atom->type, domain->sublo,
                                      domain->subhi, atom->tag, atom->nspecial,
                                      atom->special, eflag, vflag, eflag_atom,
                                      vflag_atom, host_start,
@@ -84,7 +85,7 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
     numneigh = list->numneigh;
     firstneigh = list->firstneigh;
 	
-    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x,atom->v,atom->mass, atom->type,
+    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x,atom->v, atom->type,
                       ilist, numneigh, firstneigh, eflag, vflag, eflag_atom,
                       vflag_atom, host_start, cpu_time, success);
   }
@@ -130,7 +131,7 @@ void PairSPHTaitwaterGPU::init_style() {
   int maxspecial=0;
   if (atom->molecular)
     maxspecial=atom->maxspecial;
-  int success = sph_taitwater_gpu_init(atom->ntypes+1, cutsq, B, viscosity,rho0,cut,soundspeed, force->special_lj,atom->nlocal,
+  int success = sph_taitwater_gpu_init(atom->ntypes+1, cutsq, B, viscosity,atom->rho,cut,soundspeed, force->special_lj,atom->nlocal,
                               atom->nlocal+atom->nghost, 300, maxspecial,
                               cell_size, gpu_mode, screen);
   GPU_EXTRA::check_flag(success,error,world);
@@ -141,12 +142,14 @@ void PairSPHTaitwaterGPU::init_style() {
     neighbor->requests[irequest]->full = 1;
   }
 }
+
 void PairSPHTaitwaterGPU::reinit()
 {
   Pair::reinit();
 
   sph_taitwater_gpu_reinit(atom->ntypes+1, cutsq, viscosity,cut);
 }
+
 double PairSPHTaitwaterGPU::memory_usage()
 {
   double bytes = Pair::memory_usage();
