@@ -1,16 +1,18 @@
 /***************************************************************************
                                 base_sphatomic.h
                              -------------------
-                            W. Michael Brown (ORNL)
+								Chonghang Wu
 
-  Base class for pair styles with per-particle data for position and type
+								
+	This class is created with base_atomic.h as a template							
+  Base class for sph pair styles with per-particle data for position and type
 
  __________________________________________________________________________
     This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
  __________________________________________________________________________
 
     begin                :
-    email                : brownw@ornl.gov
+    email                : 
  ***************************************************************************/
 
 #ifndef LAL_BASE_SPHATOMIC_H

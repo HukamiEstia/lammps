@@ -1,16 +1,13 @@
 /***************************************************************************
                                base_sphatomic.cpp
                              -------------------
-                            W. Michael Brown (ORNL)
-
+ This class is created with base_atomic.cpp as a template	
   Base class for pair styles with per-particle data for position and type
 
  __________________________________________________________________________
     This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
  __________________________________________________________________________
 
-    begin                :
-    email                : brownw@ornl.gov
  ***************************************************************************/
 
 #include "lal_base_sphatomic.h"

@@ -1,16 +1,13 @@
 /***************************************************************************
-                                    soft.h
+                                    sph_taitwater.h
                              -------------------
-                            Trung Dac Nguyen (ORNL)
-
+                          
   Class for acceleration of the soft pair style.
 
  __________________________________________________________________________
     This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
  __________________________________________________________________________
 
-    begin                :
-    email                : nguyentd@ornl.gov
  ***************************************************************************/
 
 #ifndef LAL_SPH_TAITWATER_H

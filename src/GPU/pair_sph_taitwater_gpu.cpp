@@ -74,7 +74,7 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
   if (gpu_mode != GPU_FORCE) {
     inum = atom->nlocal;
     firstneigh = sph_taitwater_gpu_compute_n(neighbor->ago, inum, nall,
-                                     atom->x,atom->v, atom->type, domain->sublo,
+                                     atom->x,atom->vest, atom->type, domain->sublo,
                                      domain->subhi, atom->tag, atom->nspecial,
                                      atom->special, eflag, vflag, eflag_atom,
                                      vflag_atom, host_start,
@@ -85,7 +85,7 @@ void PairSPHTaitwaterGPU::compute(int eflag, int vflag) {
     numneigh = list->numneigh;
     firstneigh = list->firstneigh;
 	
-    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x,atom->v, atom->type,
+    sph_taitwater_gpu_compute(neighbor->ago, inum, nall, atom->x,atom->vest, atom->type,
                       ilist, numneigh, firstneigh, eflag, vflag, eflag_atom,
                       vflag_atom, host_start, cpu_time, success);
   }
@@ -267,45 +267,11 @@ void PairSPHTaitwaterGPU::cpu_compute(int start, int inum, int eflag, int /* vfl
         /************************************/
        
 	mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-	printf("mu: %f\n",mu);
-	printf("mu: %f\n",mu);
-	printf("delVdotDelR : %f\n",delVdotDelR );
-	printf("rsq : %f\n",rsq );
-	printf("h : %f\n",h );
-
-	 double T =(e[i]/cv[i])+273.15;
-	printf("T: %f\n",T);
-
-	/* four-parameter exponentials*/
-
-       double realviscosity1 = (0.00201*exp(1614/T+0.00618*T-1.132e-5*T*T))/rho[i];
-	printf("real1 four parameter: %f\n",realviscosity1);
-	/*  kinematic viscosity*/
-	double realviscosity2 =pow(100, 2.5-log10(T))-0.7;
-	printf("kinematic parameter: %f\n",realviscosity2);
-
-
-	/*Two-parameter exponential*/
-	double A =0.00183;
-	double B = 1879.9;
-	double realviscosity = (A*exp(B/T))/rho[i];
-	printf("Two parameter: %f\n",realviscosity);
 	
-
-	/*if use this it may lost atoms*/
-      	 double viscosity_itype = 8*realviscosity/(h*soundspeed[itype]);
-        double viscosity_jtype = 8*realviscosity/(h*soundspeed[jtype]);
-        viscosity[itype][jtype]=(viscosity_itype+viscosity_jtype)/2;
-	
-	printf("viscosity[itype][jtype]: %f\n",viscosity[itype][jtype]);
-
-	//viscosity[itype][jtype]=realviscosity;
-
-        /*************************************/
           
           fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
               + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
-	printf("fvisc : %f\n",fvisc);
+	//printf("fvisc : %f\n",fvisc);
 
 	
         } else {

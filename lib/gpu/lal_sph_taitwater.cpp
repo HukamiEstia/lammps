@@ -1,3 +1,14 @@
+/***************************************************************************
+                                   sph_taitwater.cpp
+                             -------------------
+
+  Class for acceleration of the sph_taitwater pair style.
+And it is created as with soft.cpp as template.
+ __________________________________________________________________________
+    This file is part of the LAMMPS Accelerator Library (LAMMPS_AL)
+ __________________________________________________________________________
+
+ ***************************************************************************/
 
 #ifdef USE_OPENCL
 #include "sph_taitwater_cl.h"
@@ -137,7 +148,7 @@ void SphTaitwaterT::loop(const bool _eflag, const bool _vflag) {
   this->time_pair.start();
   if (shared_types) {
     this->k_pair_fast.set_size(GX,BX);
-    this->k_pair_fast.run(&this->atom->x,&coeff, &sp_lj,
+    this->k_pair_fast.run(&this->atom->x,&this->atom->v,&coeff, &sp_lj,
                           &this->nbor->dev_nbor, &this->_nbor_data->begin(),
                           &this->ans->force, &this->ans->engv, &eflag, &vflag,
                           &ainum, &nbor_pitch, &this->_threads_per_atom);
