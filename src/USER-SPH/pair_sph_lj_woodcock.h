@@ -13,32 +13,35 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/taitwater,PairSPHTaitwater)
+PairStyle(sph/lj/woodcock,PairSPHLJWoodcock)
 
 #else
 
-#ifndef LMP_PAIR_TAITWATER_H
-#define LMP_PAIR_TAITWATER_H
+#ifndef LMP_PAIR_LJ_WOODCOCK_H
+#define LMP_PAIR_LJ_WOODCOCK_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHTaitwater : public Pair {
+class PairSPHLJWoodcock : public Pair {
 public:
-	PairSPHTaitwater(class LAMMPS *);
-	virtual ~PairSPHTaitwater();
+	PairSPHLJWoodcock(class LAMMPS *);
+	virtual ~PairSPHLJWoodcock();
 	virtual void compute(int, int);
 	void settings(int, char **);
 	void coeff(int, char **);
 	virtual double init_one(int, int);
+	virtual double single(int, int, int, int, double, double, double, double &);
+	//double LJEOS(int);
+	void LJEOS2(double, double, double, double, double, double *, double *);
+	void LJvisc(double, double, double, double, double, double, double, double *);
 
 protected:
-	double *rho0, *soundspeed, *B;
-	double **cut,**viscosity;
-	int first;
+	double *eparam, *lparam, *nu0, *C; 
+  	double **cut;
 
-	void allocate();
+  	void allocate();
 };
 
 }

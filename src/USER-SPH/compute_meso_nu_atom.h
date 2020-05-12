@@ -11,34 +11,30 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-#ifdef PAIR_CLASS
+#ifdef COMPUTE_CLASS
 
-PairStyle(sph/taitwater,PairSPHTaitwater)
+ComputeStyle(meso/nu/atom,ComputeMesoNuAtom)
 
 #else
 
-#ifndef LMP_PAIR_TAITWATER_H
-#define LMP_PAIR_TAITWATER_H
+#ifndef LMP_COMPUTE_MESO_NU_ATOM_H
+#define LMP_COMPUTE_MESO_NU_ATOM_H
 
-#include "pair.h"
+#include "compute.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHTaitwater : public Pair {
-public:
-	PairSPHTaitwater(class LAMMPS *);
-	virtual ~PairSPHTaitwater();
-	virtual void compute(int, int);
-	void settings(int, char **);
-	void coeff(int, char **);
-	virtual double init_one(int, int);
+class ComputeMesoNuAtom : public Compute {
+ public:
+  ComputeMesoNuAtom(class LAMMPS *, int, char **);
+  ~ComputeMesoNuAtom();
+  void init();
+  void compute_peratom();
+  double memory_usage();
 
-protected:
-	double *rho0, *soundspeed, *B;
-	double **cut,**viscosity;
-	int first;
-
-	void allocate();
+ private:
+  int nmax;
+  double *nuvector;
 };
 
 }

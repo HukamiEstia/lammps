@@ -13,32 +13,32 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/taitwater,PairSPHTaitwater)
+PairStyle(sph/taitwater/andrade,PairSPHTaitwaterAndrade)
 
 #else
 
-#ifndef LMP_PAIR_TAITWATER_H
-#define LMP_PAIR_TAITWATER_H
+#ifndef LMP_PAIR_TAITWATER_ANDRADE_H
+#define LMP_PAIR_TAITWATER_ANDRADE_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHTaitwater : public Pair {
-public:
-	PairSPHTaitwater(class LAMMPS *);
-	virtual ~PairSPHTaitwater();
-	virtual void compute(int, int);
-	void settings(int, char **);
-	void coeff(int, char **);
-	virtual double init_one(int, int);
+class PairSPHTaitwaterAndrade : public Pair {
+ public:
+  PairSPHTaitwaterAndrade(class LAMMPS *);
+  virtual ~PairSPHTaitwaterAndrade();
+  virtual void compute(int, int);
+  void settings(int, char **);
+  void coeff(int, char **);
+  virtual double init_one(int, int);
 
-protected:
-	double *rho0, *soundspeed, *B;
-	double **cut,**viscosity;
-	int first;
+ protected:
+  double *rho0, *soundspeed, *A, *B, *C;
+  double **cut;
+  int first;
 
-	void allocate();
+  void allocate();
 };
 
 }
