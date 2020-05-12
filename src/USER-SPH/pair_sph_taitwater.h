@@ -25,20 +25,20 @@ PairStyle(sph/taitwater,PairSPHTaitwater)
 namespace LAMMPS_NS {
 
 class PairSPHTaitwater : public Pair {
- public:
-  PairSPHTaitwater(class LAMMPS *);
-  virtual ~PairSPHTaitwater();
-  virtual void compute(int, int);
-  void settings(int, char **);
-  void coeff(int, char **);
-  virtual double init_one(int, int);
+public:
+	PairSPHTaitwater(class LAMMPS *);
+	virtual ~PairSPHTaitwater();
+	virtual void compute(int, int);
+	void settings(int, char **);
+	void coeff(int, char **);
+	virtual double init_one(int, int);
 
- protected:
-  double *rho0, *soundspeed, *B;
-  double **cut,**viscosity;
-  int first;
+protected:
+	double *rho0, *soundspeed, *B;
+	double **cut,**viscosity;
+	int first;
 
-  void allocate();
+	void allocate();
 };
 
 }

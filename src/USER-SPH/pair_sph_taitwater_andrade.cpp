@@ -98,7 +98,6 @@ void PairSPHTaitwaterAndrade::compute(int eflag, int vflag) {
   firstneigh = list->firstneigh;
 
   // loop over neighbors of my atoms
-
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     xtmp = x[i][0];

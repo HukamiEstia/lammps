@@ -25,21 +25,23 @@ PairStyle(sph/lj/woodcock,PairSPHLJWoodcock)
 namespace LAMMPS_NS {
 
 class PairSPHLJWoodcock : public Pair {
- public:
-  PairSPHLJWoodcock(class LAMMPS *);
-  virtual ~PairSPHLJWoodcock();
-  virtual void compute(int, int);
-  void settings(int, char **);
-  void coeff(int, char **);
-  virtual double init_one(int, int);
-  virtual double single(int, int, int, int, double, double, double, double &);
-  //double LJEOS(int);
-  void LJEOS2(double, double, double, double *, double *);
+public:
+	PairSPHLJWoodcock(class LAMMPS *);
+	virtual ~PairSPHLJWoodcock();
+	virtual void compute(int, int);
+	void settings(int, char **);
+	void coeff(int, char **);
+	virtual double init_one(int, int);
+	virtual double single(int, int, int, int, double, double, double, double &);
+	//double LJEOS(int);
+	void LJEOS2(double, double, double, double, double, double *, double *);
+	void LJvisc(double, double, double, double, double, double, double, double *);
 
- protected:
-  double **cut,**viscosity;
+protected:
+	double *eparam, *lparam, *nu0, *C; 
+  	double **cut;
 
-  void allocate();
+  	void allocate();
 };
 
 }

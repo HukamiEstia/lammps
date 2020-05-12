@@ -37,7 +37,10 @@ PairSPHLJWoodcock::~PairSPHLJWoodcock() {
     memory->destroy(cutsq);
 
     memory->destroy(cut);
-    memory->destroy(viscosity);
+    memory->destroy(eparam);
+    memory->destroy(lparam);
+    memory->destroy(nu0);
+    memory->destroy(C);
   }
 }
 
@@ -48,8 +51,8 @@ void PairSPHLJWoodcock::compute(int eflag, int vflag) {
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq, ihcub;
-  double rsq, wfd, delVdotDelR, mu, deltaE, ci, cj, lrc;
+  double vxtmp, vytmp, vztmp, r, rsq, wf, wfd, delVdotDelR, h, ih, ihsq, ihcub, lrc;
+  double imass, jmass, mu, fi, fj, fvisc, ivisc, jvisc, ijvisc, Ti, Tj, deltaE, ci, cj;
 
   ev_init(eflag, vflag);
 
@@ -62,6 +65,7 @@ void PairSPHLJWoodcock::compute(int eflag, int vflag) {
   double *e = atom->e;
   double *cv = atom->cv;
   double *drho = atom->drho;
+  double *nu = atom->nu;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   int newton_pair = force->newton_pair;
@@ -87,10 +91,11 @@ void PairSPHLJWoodcock::compute(int eflag, int vflag) {
 
     imass = mass[itype];
 
-    // compute pressure of particle i with LJ EOS
-    LJEOS2(rho[i], e[i], cv[i], &fi, &ci);
+    // compute pressure, soundspeed and viscosity of particle i with LJ EOS
+    LJEOS2(rho[i], e[i], cv[i], eparam[itype], lparam[itype], &fi, &ci);
     fi /= (rho[i] * rho[i]);
     //printf("fi = %f\n", fi);
+    LJvisc(rho[i], e[i], cv[i], eparam[itype], lparam[itype], nu0[itype], C[itype], &nu[i]);
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
@@ -117,14 +122,16 @@ void PairSPHLJWoodcock::compute(int eflag, int vflag) {
           // The missing factor of r is recovered by
           // (1) using delV . delX instead of delV . (delX/r) and
           // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
+          wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
           wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
         } else {
           // Lucy Kernel, 2d
+          wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
           wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
         }
 
-        // function call to LJ EOS
-        LJEOS2(rho[j], e[j], cv[j], &fj, &cj);
+        // compute pressure, soundspeed and viscosity of particle j with LJ EOS
+        // LJEOS2(rho[j], e[j], cv[j], &fj, &cj);
         fj /= (rho[j] * rho[j]);
 
         // apply long-range correction to model a LJ fluid with cutoff
@@ -137,10 +144,13 @@ void PairSPHLJWoodcock::compute(int eflag, int vflag) {
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
             + delz * (vztmp - v[j][2]);
 
-        // artificial viscosity (Monaghan 1992)
+        // averaged artificial viscosities
         if (delVdotDelR < 0.) {
           mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-          fvisc = -viscosity[itype][jtype] * (ci + cj) * mu / (rho[i] + rho[j]);
+          ivisc = 8 * nu[i] / (rho[i] * ci * h);
+          jvisc = 8 * nu[j] / (rho[j] * cj * h);
+          ijvisc = wf * (imass * ivisc + jmass * jvisc) / (rho[i] + rho[j]);
+          fvisc = -ijvisc * (ci + cj) * mu / (rho[i] + rho[j]);
         } else {
           fvisc = 0.;
         }
@@ -192,7 +202,11 @@ void PairSPHLJWoodcock::allocate() {
   memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
 
   memory->create(cut, n + 1, n + 1, "pair:cut");
-  memory->create(viscosity, n + 1, n + 1, "pair:viscosity");
+  memory->create(eparam, n + 1, "pair:eparam");
+  memory->create(lparam, n + 1, "pair:lparam");
+  memory->create(nu0, n + 1, "pair:nu0");
+  memory->create(C, n + 1, "pair:C");
+
 }
 
 /* ----------------------------------------------------------------------
@@ -202,7 +216,7 @@ void PairSPHLJWoodcock::allocate() {
 void PairSPHLJWoodcock::settings(int narg, char **/*arg*/) {
   if (narg != 0)
     error->all(FLERR,
-        "Illegal number of arguments for pair_style sph/lj");
+        "Illegal number of arguments for pair_style sph/lj/woodcock");
 }
 
 /* ----------------------------------------------------------------------
@@ -210,9 +224,9 @@ void PairSPHLJWoodcock::settings(int narg, char **/*arg*/) {
  ------------------------------------------------------------------------- */
 
 void PairSPHLJWoodcock::coeff(int narg, char **arg) {
-  if (narg != 4)
+  if (narg != 7)
     error->all(FLERR,
-        "Incorrect args for pair_style sph/lj coefficients");
+        "Incorrect args for pair_style sph/lj/woodcock coefficients");
   if (!allocated)
     allocate();
 
@@ -220,13 +234,19 @@ void PairSPHLJWoodcock::coeff(int narg, char **arg) {
   force->bounds(FLERR,arg[0], atom->ntypes, ilo, ihi);
   force->bounds(FLERR,arg[1], atom->ntypes, jlo, jhi);
 
-  double viscosity_one = force->numeric(FLERR,arg[2]);
-  double cut_one = force->numeric(FLERR,arg[3]);
+  double eparam_one = force->numeric(FLERR,arg[2]);
+  double lparam_one = force->numeric(FLERR,arg[3]);
+  double nu0_one = force->numeric(FLERR,arg[4]);
+  double C_one = force->numeric(FLERR,arg[5]);
+  double cut_one = force->numeric(FLERR,arg[6]);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
+    eparam[i] = eparam_one;
+    lparam[i] = lparam_one;
+    nu0[i] = nu0_one;
+    C[i] = C_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
       printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
       cut[i][j] = cut_one;
       setflag[i][j] = 1;
@@ -249,7 +269,6 @@ double PairSPHLJWoodcock::init_one(int i, int j) {
   }
 
   cut[j][i] = cut[i][j];
-  viscosity[j][i] = viscosity[i][j];
 
   return cut[i][j];
 }
@@ -264,30 +283,6 @@ double PairSPHLJWoodcock::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtyp
 }
 
 
-/*double PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv) {
-
-
-  double T = e / cv;
-  if (T < 1.e-2) T = 1.e-2;
-  //printf("%f %f\n", T, rho);
-  double iT = 0.1e1 / T;
-  //double itpow1_4 = exp(0.25 * log(iT)); //pow(iT, 0.1e1 / 0.4e1);
-  double itpow1_4 = pow(iT, 0.1e1 / 0.4e1);
-  double x = rho * itpow1_4;
-  double xsq = x * x;
-  double xpow3 = xsq * x;
-  double xpow4 = xsq * xsq;
-  double xpow9 = xpow3 * xpow3 * xpow3;
-
-
-  return (0.1e1 + rho * (0.3629e1 + 0.7264e1 * x + 0.104925e2 * xsq + 0.11460e2
-      * xpow3 + 0.21760e1 * xpow9 - itpow1_4 * itpow1_4 * (0.5369e1 + 0.13160e2
-      * x + 0.18525e2 * xsq - 0.17076e2 * xpow3 + 0.9320e1 * xpow4) + iT
-      * (-0.3492e1 + 0.18698e2 * x - 0.35505e2 * xsq + 0.31816e2 * xpow3
-          - 0.11195e2 * xpow4)) * itpow1_4) * rho * T;
-}*/
-
-
 /* --------------------------------------------------------------------------------------------- */
 /* Lennard-Jones EOS,
    Francis H. Ree
@@ -295,11 +290,16 @@ double PairSPHLJWoodcock::single(int /*i*/, int /*j*/, int /*itype*/, int /*jtyp
    Journal of Chemical Physics 73 pp. 5401-5403 (1980)
 */
 
-void PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv, double *p, double *c) {
+void PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv,
+                               double eparam, double lparam,
+                               double *p, double *c) {
   double T = e/cv;
-  double beta = 1.0 / T;
-  double beta_sqrt = sqrt(beta);
-  double x = rho * sqrt(beta_sqrt);
+  double T_star = 1.38064852e-23 * T / eparam;
+  double rho_star = rho * lparam * lparam * lparam;
+  double beta = 1.0 / 1.38064852e-23 * T;
+  double invTs = 1.0 / T_star;
+  double invTs_sqrt = sqrt(invTs);
+  double x = rho_star * sqrt(invTs_sqrt);
 
   double xsq = x * x;
   double xpow3 = xsq * x;
@@ -307,13 +307,13 @@ void PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv, double *p, doubl
 
   /* differential of Helmholtz free energy w.r.t. x */
   double diff_A_NkT = 3.629 + 7.264*x - beta*(3.492 - 18.698*x + 35.505*xsq - 31.816*xpow3 + 11.195*xpow4)
-                    - beta_sqrt*(5.369 + 13.16*x + 18.525*xsq - 17.076*xpow3 + 9.32*xpow4)
+                    - invTs_sqrt*(5.369 + 13.16*x + 18.525*xsq - 17.076*xpow3 + 9.32*xpow4)
                     + 10.4925*xsq + 11.46*xpow3 + 2.176*xpow4*xpow4*x;
 
  /* differential of Helmholtz free energy w.r.t. x^2 */
   double d2A_dx2 = 7.264 + 20.985*x \
                  + beta*(18.698 - 71.01*x + 95.448*xsq - 44.78*xpow3)\
-                 - beta_sqrt*(13.16 + 37.05*x - 51.228*xsq + 37.28*xpow3)\
+                 - invTs_sqrt*(13.16 + 37.05*x - 51.228*xsq + 37.28*xpow3)\
                  + 34.38*xsq + 19.584*xpow4*xpow4;
 
   // p = rho k T * (1 + rho * d(A/(NkT))/drho)
@@ -327,35 +327,20 @@ void PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv, double *p, doubl
   }
 }
 
-/* ------------------------------------------------------------------------------ */
 
-/* Jirí Kolafa, Ivo Nezbeda
- * "The Lennard-Jones fluid: an accurate analytic and theoretically-based equation of state",
- *  Fluid Phase Equilibria 100 pp. 1-34 (1994) */
-/*double PairSPHLJWoodcock::LJEOS2(double rho, double e, double cv) {
- double T = e / cv;
+void PairSPHLJWoodcock::LJvisc(double rho, double e, double cv, 
+                               double eparam, double lparam, 
+                               double nu0, double C, double *nu) {
+  double T = e/cv;
+  double T_star = 1.38064852e-23 * T / eparam;
+  double rho_star = rho * lparam * lparam * lparam;
+  double invTs = 1.0 / T_star;
+  double invTs_cbrt = sqrt(invTs);
+  double Tspow4 = Tspow4 * Tspow4 * Tspow4 * Tspow4;
+  double rspow4 = rho_star * rho_star * rho_star * rho_star;
 
- double sT = sqrt(T);
- double isT = 1.0 / sT;
- double dC = -0.063920968 * log(T) + 0.011117524 / T - 0.076383859 / sT
- + 1.080142248 + 0.000693129 * sT;
- double eta = 3.141592654 / 6. * rho * (dC * dC * dC);
- double zHS = (1 + eta * (1 + eta * (1 - eta / 1.5 * (1 + eta))))
- / ((1. - eta) * (1. - eta) * (1. - eta));
- double BC = (((((-0.58544978 * isT + 0.43102052) * isT + .87361369) * isT
- - 4.13749995) * isT + 2.90616279) * isT - 7.02181962) / T + 0.02459877;
- double gammaBH = 1.92907278;
+  double Bn = sqrt(2) * (1 - T_star/8 - 1/Tspow4);
 
- double sum = ((2.01546797 * 2 + rho * ((-28.17881636) * 3 + rho
- * (28.28313847 * 4 + rho * (-10.42402873) * 5))) + (-19.58371655 * 2
- + rho * (+75.62340289 * 3 + rho * ((-120.70586598) * 4 + rho
- * (+93.92740328 * 5 + rho * (-27.37737354) * 6)))) / sqrt(T)
- + ((29.34470520 * 2 + rho * ((-112.35356937) * 3 + rho * (+170.64908980
- * 4 + rho * ((-123.06669187) * 5 + rho * 34.42288969 * 6))))
- + ((-13.37031968) * 2 + rho * (65.38059570 * 3 + rho
- * ((-115.09233113) * 4 + rho * (88.91973082 * 5 + rho
- * (-25.62099890) * 6)))) / T) / T) * rho * rho;
- return ((zHS + BC / exp(gammaBH * rho * rho) * rho * (1 - 2 * gammaBH * rho
- * rho)) * T + sum) * rho;
- }
-*/
+  *nu = nu0 * T_star * (1 + Bn * rho_star + C * invTs_cbrt * rspow4);
+
+}
